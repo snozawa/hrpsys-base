@@ -122,6 +122,9 @@ class Stabilizer
   void getFootmidCoords (rats::coordinates& ret);
   double calcDampingControl (const double tau_d, const double tau, const double prev_d,
                              const double DD, const double TT);
+  double calcAlpha (const hrp::Vector3& new_refzmp, const double ledge, const double redge);
+  void calcRefForceMoment(const hrp::Vector3& new_refzmp);
+  void calcRefForceMoment ();
   bool dummy (const char* i_param);
 
  protected:
@@ -228,7 +231,11 @@ class Stabilizer
   bool on_ground;
   double zmp_origin_off;
 //   hrp::Vector3 foot_origin_pos;
+  hrp::Vector3 ee_pos[2];
   hrp::Matrix33 act_root_rot;
+  hrp::Vector3 ref_foot_force[2];
+  hrp::Vector3 ref_foot_moment[2];
+  hrp::Vector3 tau_0, new_refzmp;
 };
 
 

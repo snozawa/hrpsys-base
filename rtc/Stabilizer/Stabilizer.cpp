@@ -327,8 +327,8 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
     case MODE_ST:
       // if (DEBUGP2) std::cerr << "ST"<< std::endl;
       //calcRUNST();
-      calcTPCC();
-      //calcEEForceMomentControl();
+      //calcTPCC();
+      calcEEForceMomentControl();
       if ( transition_count == 0 && !on_ground ) control_mode = MODE_SYNC_TO_AIR;
       break;
     case MODE_SYNC_TO_IDLE:
@@ -524,6 +524,7 @@ void Stabilizer::getActualParameters ()
   act_cog = foot_origin_rot.transpose() * (act_cog - foot_origin_pos);
   act_cog_vel = foot_origin_rot.transpose() * act_cog_vel;
   act_root_rot = m_robot->rootLink()->R;
+  //
   // revert
   m_robot->rootLink()->p = org_root_pos;
   m_robot->rootLink()->R = org_root_rot;
@@ -580,6 +581,8 @@ void Stabilizer::getTargetParameters ()
   rats::mid_coords(tmpc, 0.5, leg_c[0], leg_c[1]);
   foot_origin_pos = tmpc.pos;
   foot_origin_rot = tmpc.rot;
+  // initialize for new_refzmp
+  new_refzmp = refzmp;
   // world (current-tmp) => local (foot_origin)
   zmp_origin_off = refzmp(2) - foot_origin_pos(2);
   refzmp = foot_origin_rot.transpose() * (refzmp - foot_origin_pos);
@@ -730,6 +733,77 @@ void Stabilizer::calcTPCC() {
   }
 }
 
+double Stabilizer::calcAlpha (const hrp::Vector3& new_refzmp, const double ledge, const double redge)
+{
+  double alpha = 0.5;
+  if (ledge < new_refzmp(1)) {
+    alpha = 0.0;
+  } else if (redge > new_refzmp(1)) {
+    alpha = 1.0;
+  } else {
+    alpha = fabs(new_refzmp(1) - ledge)/ fabs(ledge-redge);
+  }
+  return alpha;
+}
+
+void Stabilizer::calcRefForceMoment (const hrp::Vector3& new_refzmp)
+{
+  // distribute new ZMP into foot force & moment
+  {
+    double tmass = m_robot->totalMass();
+    double alpha;
+    double leg_margin = 0.065; // [m]
+    for (size_t i = 0; i < 2; i++) {
+      hrp::Link* target = m_robot->sensor<hrp::ForceSensor>(sensor_names[i])->link;
+      ee_pos[i] = target->p + target->R * ee_map[target->name].localp;
+      //ee_pos[i] = foot_origin_rot.transpose() * (target->p + target->R * ee_map[target->name].localp - foot_origin_pos);
+    }
+    // tmp
+    double ledge=ee_pos[1](1) - leg_margin;
+    double redge=ee_pos[0](1) + leg_margin;
+    alpha = calcAlpha(new_refzmp, ledge, redge);
+    if (DEBUGP) {
+      std::cerr << "alpha [" << alpha << "]" << std::endl;
+    }
+    ref_foot_force[0] = hrp::Vector3(0,0, alpha * 9.8 * tmass);
+    ref_foot_force[1] = hrp::Vector3(0,0, (1-alpha) * 9.8 * tmass);
+    tau_0 = hrp::Vector3::Zero();
+    for (size_t i = 0; i < 2; i++) {
+      tau_0 -= (ee_pos[i] - new_refzmp).cross(ref_foot_force[i]);
+    }
+    if ( alpha == 0.0 ) {
+      ref_foot_moment[0] = hrp::Vector3::Zero();
+      ref_foot_moment[1] = -1 * (ee_pos[1] - new_refzmp).cross(ref_foot_force[1]);
+    } else if ( alpha == 1.0 ) {
+      ref_foot_moment[1] = hrp::Vector3::Zero();
+      ref_foot_moment[0] = -1 * (ee_pos[0] - new_refzmp).cross(ref_foot_force[0]);
+    } else { // double support
+      // x
+      // right
+      //if (tau_0(0) < 0) ref_foot_moment[0](0) = tau_0(0);
+      if (tau_0(0) > 0) ref_foot_moment[0](0) = tau_0(0);
+      else ref_foot_moment[0](0) = 0;
+      // left
+      //if (tau_0(0) < 0) ref_foot_moment[1](0) = 0;
+      if (tau_0(0) > 0) ref_foot_moment[1](0) = 0;
+      else ref_foot_moment[1](0) = tau_0(0);
+      //           ref_foot_moment[0](0) = tau_0(0) * alpha;
+      //           ref_foot_moment[1](0) = tau_0(0) * (1-alpha);
+      // y
+      ref_foot_moment[0](1) = tau_0(1) * alpha;
+      ref_foot_moment[1](1) = tau_0(1) * (1-alpha);
+      ref_foot_moment[0](2) = ref_foot_moment[1](2) = 0.0;
+    }
+    if (DEBUGP) {
+      std::cerr << "tau [" << tau_0(0) << " " << tau_0(1) << " " << tau_0(2) << "]" << std::endl;
+      std::cerr << "fR [" << ref_foot_force[0](0) << " " << ref_foot_force[0](1) << " " << ref_foot_force[0](2) << "]" << std::endl;
+      std::cerr << "fL [" << ref_foot_force[1](0) << " " << ref_foot_force[1](1) << " " << ref_foot_force[1](2) << "]" << std::endl;
+      std::cerr << "tR [" << ref_foot_moment[0](0) << " " << ref_foot_moment[0](1) << " " << ref_foot_moment[0](2) << "]" << std::endl;
+      std::cerr << "tL [" << ref_foot_moment[1](0) << " " << ref_foot_moment[1](1) << " " << ref_foot_moment[1](2) << "]" << std::endl;
+    }
+  }
+}
+
 void Stabilizer::calcEEForceMomentControl() {
   if ( m_robot->numJoints() == m_qRef.data.length() ) {
 
@@ -761,43 +835,42 @@ void Stabilizer::calcEEForceMomentControl() {
 //       }
 
       // new ZMP calculation
-      hrp::Vector3 new_refzmp = refzmp;
-      hrp::Vector3 ref_foot_force[2];
-      hrp::Vector3 ref_foot_moment[2];
+      //hrp::Vector3 new_refzmp = refzmp;
       {
-        // store current configuration (previous st result)
-        hrp::Vector3 org_root_pos = m_robot->rootLink()->p;
-        hrp::Matrix33 org_root_rot = m_robot->rootLink()->R;
-        hrp::dvector org_q(m_robot->numJoints());
-        for ( int i = 0; i < m_robot->numJoints(); i++ ){
-          org_q(i) = m_robot->joint(i)->q;
-        }
-        // update by current joint angles
-        for ( int i = 0; i < m_robot->numJoints(); i++ ){
-          m_robot->joint(i)->q = m_qCurrent.data[i];
-        }
-        //m_robot->calcForwardKinematics();
-        fixLegToCoords(":both", target_foot_midcoords); // tempolary
-        // calc COG informatoin
-        hrp::Vector3 act_cog = m_robot->calcCM();
-        hrp::Vector3 act_cog_vel = (act_cog - prev_act_cog)/dt;
+//         // store current configuration (previous st result)
+//         hrp::Vector3 org_root_pos = m_robot->rootLink()->p;
+//         hrp::Matrix33 org_root_rot = m_robot->rootLink()->R;
+//         hrp::dvector org_q(m_robot->numJoints());
+//         for ( int i = 0; i < m_robot->numJoints(); i++ ){
+//           org_q(i) = m_robot->joint(i)->q;
+//         }
+//         // update by current joint angles
+//         for ( int i = 0; i < m_robot->numJoints(); i++ ){
+//           m_robot->joint(i)->q = m_qCurrent.data[i];
+//         }
+//         //m_robot->calcForwardKinematics();
+//         fixLegToCoords(":both", target_foot_midcoords); // tempolary
+//         // calc COG informatoin
+//         hrp::Vector3 act_cog = m_robot->calcCM();
+//         hrp::Vector3 act_cog_vel = (act_cog - prev_act_cog)/dt;
         //  cog vel filtering
         //cog_vel = 0.05 * nf_cog_vel + 0.95 * cog_vel; // ng
         //cog_vel = 0.1 * nf_cog_vel + 0.9 * cog_vel; // ng
         //cog_vel = 0.2 * nf_cog_vel + 0.8 * cog_vel;
-        act_cog_vel = 0.5 * prev_act_cog_vel + 0.5 * act_cog_vel; // ok
+        //act_cog_vel = 0.5 * prev_act_cog_vel + 0.5 * act_cog_vel; // ok
+
         // Kajita's feedback low
         //double k1 = -1.41429, k2 = -0.404082, k3 = -0.18;
         //double k_ratio = 0.3 * transition_smooth_gain;
         //double k1 = -1.41429*k_ratio, k2 = -0.404082*k_ratio, k3 = -0.18*k_ratio;
         {
-          double k_ratio = 0.7 * transition_smooth_gain;
+          double k_ratio = 0.99 * transition_smooth_gain;
           //double k_ratio = 0.7 * transition_smooth_gain;
           double k1 = -1.41429*k_ratio*1, k2 = -0.404082*k_ratio*1, k3 = -0.18*k_ratio;
           new_refzmp(1) += k1 * (refcog(1) - act_cog(1)) + k2 * (refcog_vel(1) - act_cog_vel(1)) + k3 * (refzmp(1) - act_zmp(1));
         }
         {
-          double k_ratio = 0.9 * transition_smooth_gain;
+          double k_ratio = 0.99 * transition_smooth_gain;
           double k1 = -1.41429*k_ratio, k2 = -0.404082*k_ratio, k3 = -0.18*k_ratio;
           new_refzmp(0) += k1 * (refcog(0) - act_cog(0)) + k2 * (refcog_vel(0) - act_cog_vel(0)) + k3 * (refzmp(0) - act_zmp(0));
         }
@@ -811,79 +884,17 @@ void Stabilizer::calcEEForceMomentControl() {
           std::cerr << "dZMP [" << (new_refzmp(0)-refzmp(0)) *1e3 << " " << (new_refzmp(1)-refzmp(1))*1e3 << " " << (new_refzmp(2)-refzmp(2))*1e3 << "]" << std::endl;
           std::cerr << "nZMP [" << new_refzmp(0) *1e3 << " " << new_refzmp(1)*1e3 << " " << new_refzmp(2)*1e3 << "]" << std::endl;
         }
-        prev_act_cog_vel = act_cog_vel;
-        prev_act_cog = act_cog;
+//         prev_act_cog_vel = act_cog_vel;
+//         prev_act_cog = act_cog;
 
-      // distribute new ZMP into foot force & moment
-      {
-        double tmass = m_robot->totalMass();
-        double alpha;
-        double leg_margin = 0.065; // [m]
-        hrp::Vector3 ee_pos[2];
-        for (size_t i = 0; i < 2; i++) {
-          hrp::Link* target = m_robot->sensor<hrp::ForceSensor>(sensor_names[i])->link;
-          ee_pos[i] = target->p + target->R * ee_map[target->name].localp;
-        }
-        // tmp
-        double ledge=ee_pos[1](1) - leg_margin;
-        double redge=ee_pos[0](1) + leg_margin;
-        if (ledge < new_refzmp(1)) {
-          alpha = 0.0;
-        } else if (redge > new_refzmp(1)) {
-          alpha = 1.0;
-        } else {
-          alpha = fabs(new_refzmp(1) - ledge)/ fabs(ledge-redge);
-        }
-        if (DEBUGP) {
-          std::cerr << "alpha [" << alpha << "]" << std::endl;
-        }
-        //alpha = 0.5;
-        ref_foot_force[0] = hrp::Vector3(0,0, alpha * 9.8 * tmass);
-        ref_foot_force[1] = hrp::Vector3(0,0, (1-alpha) * 9.8 * tmass);
-//         ref_foot_force[0] = hrp::Vector3(0,0, 0.5 * 9.8 * tmass);
-//         ref_foot_force[1] = hrp::Vector3(0,0, 0.5 * 9.8 * tmass);
-        hrp::Vector3 tau_0 = hrp::Vector3::Zero();
-        for (size_t i = 0; i < 2; i++) {
-          tau_0 -= (ee_pos[i] - new_refzmp).cross(ref_foot_force[i]);
-          //tau_0 = (ee_pos[i] - new_refzmp).cross(ref_foot_force[i]);
-        }
-        if ( alpha == 0.0 ) {
-          ref_foot_moment[0] = hrp::Vector3::Zero();
-          ref_foot_moment[1] = -1 * (ee_pos[1] - new_refzmp).cross(ref_foot_force[1]);
-        } else if ( alpha == 1.0 ) {
-          ref_foot_moment[1] = hrp::Vector3::Zero();
-          ref_foot_moment[0] = -1 * (ee_pos[0] - new_refzmp).cross(ref_foot_force[0]);
-        } else { // double support
-          // x
-          // right
-          //if (tau_0(0) < 0) ref_foot_moment[0](0) = tau_0(0);
-          if (tau_0(0) > 0) ref_foot_moment[0](0) = tau_0(0);
-          else ref_foot_moment[0](0) = 0;
-          // left
-          //if (tau_0(0) < 0) ref_foot_moment[1](0) = 0;
-          if (tau_0(0) > 0) ref_foot_moment[1](0) = 0;
-          else ref_foot_moment[1](0) = tau_0(0);
-//           ref_foot_moment[0](0) = tau_0(0) * alpha;
-//           ref_foot_moment[1](0) = tau_0(0) * (1-alpha);
-          // y
-          ref_foot_moment[0](1) = tau_0(1) * alpha;
-          ref_foot_moment[1](1) = tau_0(1) * (1-alpha);
-          ref_foot_moment[0](2) = ref_foot_moment[1](2) = 0.0;
-        }
-        if (DEBUGP) {
-          std::cerr << "tau [" << tau_0(0) << " " << tau_0(1) << " " << tau_0(2) << "]" << std::endl;
-          std::cerr << "fR [" << ref_foot_force[0](0) << " " << ref_foot_force[0](1) << " " << ref_foot_force[0](2) << "]" << std::endl;
-          std::cerr << "fL [" << ref_foot_force[1](0) << " " << ref_foot_force[1](1) << " " << ref_foot_force[1](2) << "]" << std::endl;
-          std::cerr << "tR [" << ref_foot_moment[0](0) << " " << ref_foot_moment[0](1) << " " << ref_foot_moment[0](2) << "]" << std::endl;
-          std::cerr << "tL [" << ref_foot_moment[1](0) << " " << ref_foot_moment[1](1) << " " << ref_foot_moment[1](2) << "]" << std::endl;
-        }
-        // return to original current configuration
-        m_robot->rootLink()->p = org_root_pos;
-        m_robot->rootLink()->R = org_root_rot;
-        for ( int i = 0; i < m_robot->numJoints(); i++ ){
-          m_robot->joint(i)->q = org_q(i);
-        }
-        m_robot->calcForwardKinematics();
+        calcRefForceMoment(new_refzmp);
+//         // return to original current configuration
+//         m_robot->rootLink()->p = org_root_pos;
+//         m_robot->rootLink()->R = org_root_rot;
+//         for ( int i = 0; i < m_robot->numJoints(); i++ ){
+//           m_robot->joint(i)->q = org_q(i);
+//         }
+//         m_robot->calcForwardKinematics();
         // debug
         for (size_t i = 0; i < 3; i++) {
           // cog zmp
@@ -899,9 +910,8 @@ void Stabilizer::calcEEForceMomentControl() {
           m_debugData.data[i+27] = ref_foot_force[1](i);
           m_debugData.data[i+30] = ref_foot_moment[1](i);
           m_debugData.data[i+33] = tau_0(i);
-          m_debugData.data[36] = alpha;
+          //m_debugData.data[36] = alpha;
         }
-      }
       }
 
       // foor modif
