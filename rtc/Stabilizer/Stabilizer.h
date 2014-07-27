@@ -228,7 +228,7 @@ class Stabilizer
   bool on_ground;
   double zmp_origin_off;
 //   hrp::Vector3 foot_origin_pos;
-//   hrp::Matrix33 foot_origin_rot;
+  hrp::Matrix33 act_root_rot;
 };
 
 
