@@ -104,10 +104,11 @@ class Stabilizer
   void startStabilizer(void);
   void stopStabilizer(void);
   void getCurrentParameters ();
+  void getActualParameters ();
   void getTargetParameters ();
   void sync_2_st ();
   void sync_2_idle();
-  bool calcZMP(hrp::Vector3& ret_zmp);
+  bool calcZMP(hrp::Vector3& ret_zmp, const double zmp_z);
   void calcRUNST();
   void calcTPCC();
   void calcEEForceMomentControl();
@@ -212,7 +213,7 @@ class Stabilizer
   hrp::Vector3 d_foot_rpy[2];
   rats::coordinates target_foot_midcoords;
   double zctrl;
-  hrp::Vector3 refzmp, refcog, refcog_vel;
+  hrp::Vector3 refzmp, refcog, refcog_vel, act_cog, act_cog_vel;
   // TPCC
   double k_tpcc_p[2], k_tpcc_x[2], d_rpy[2], k_brot_p[2], k_brot_tc[2];
   hrp::Vector3 act_zmp, rel_act_zmp, prefcog, prev_act_cog, prev_act_cog_vel;
@@ -223,6 +224,11 @@ class Stabilizer
   double pangx_ref, pangy_ref, pangx, pangy;
   double k_run_b[2], d_run_b[2];
   double rdx, rdy, rx, ry;
+  // eefm
+  bool on_ground;
+  double zmp_origin_off;
+//   hrp::Vector3 foot_origin_pos;
+//   hrp::Matrix33 foot_origin_rot;
 };
 
 
