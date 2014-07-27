@@ -484,7 +484,8 @@ void Stabilizer::getActualParameters ()
   m_robot->rootLink()->p = hrp::Vector3(0,0,0);
   hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
   hrp::Matrix33 senR = sen->link->R * sen->localR;
-  hrp::Matrix33 act_Rs(hrp::rotFromRpy(m_rpy.data.r, m_rpy.data.p, m_rpy.data.y));
+  //hrp::Matrix33 act_Rs(hrp::rotFromRpy(m_rpy.data.r, m_rpy.data.p, m_rpy.data.y));
+  hrp::Matrix33 act_Rs(hrp::rotFromRpy(m_rpy.data.r*0.5, m_rpy.data.p*0.5, m_rpy.data.y*0.5));
   m_robot->rootLink()->R = act_Rs * (senR.transpose() * m_robot->rootLink()->R);
   m_robot->calcForwardKinematics();
   //fixLegToCoords(":both", target_foot_midcoords);
@@ -522,6 +523,7 @@ void Stabilizer::getActualParameters ()
   act_zmp = foot_origin_rot.transpose() * (act_zmp - foot_origin_pos);
   act_cog = foot_origin_rot.transpose() * (act_cog - foot_origin_pos);
   act_cog_vel = foot_origin_rot.transpose() * act_cog_vel;
+  act_root_rot = m_robot->rootLink()->R;
   // revert
   m_robot->rootLink()->p = org_root_pos;
   m_robot->rootLink()->R = org_root_rot;
@@ -652,21 +654,36 @@ void Stabilizer::calcTPCC() {
                               + k_tpcc_x[i] * transition_smooth_gain * (refcog(i) - act_cog(i));
         newcog(i) = uu(i) * dt + cog(i);
       }
-      for (size_t i = 0; i < 3; i++) {
-        // cog zmp
-        m_debugData.data[i] = refcog(i);
-        m_debugData.data[i+3] = act_cog(i);
-        m_debugData.data[i+6] = refcog_vel(i);
-        m_debugData.data[i+9] = act_cog_vel(i);
-        m_debugData.data[i+12] = refzmp(i);
-        m_debugData.data[i+15] = act_zmp(i);
-        m_debugData.data[i+18] = 0;
-        m_debugData.data[i+21] = 0;
-        m_debugData.data[i+24] = 0;
-        m_debugData.data[i+27] = 0;
-        m_debugData.data[i+30] = 0;
-        m_debugData.data[i+33] = 0;
-        m_debugData.data[36] = 0;
+      hrp::Vector3 tmpfp=hrp::Vector3(0,0,0);
+      for (size_t i = 0; i < 2; i++) {
+        hrp::Link* target = m_robot->sensor<hrp::ForceSensor>(sensor_names[i])->link;
+        tmpfp += target->p;
+      }
+      tmpfp *= 0.5;
+      hrp::Vector3 tmpzmp;
+      calcZMP(tmpzmp, zmp_origin_off+tmpfp(2));
+      cog = (cog - tmpfp);
+      tmpzmp = (tmpzmp - tmpfp);
+      //
+      {
+        hrp::Vector3 actrpy(hrp::rpyFromRot(act_root_rot));
+        hrp::Vector3 currpy(hrp::rpyFromRot(m_robot->rootLink()->R));
+        for (size_t i = 0; i < 3; i++) {
+          // cog zmp
+          m_debugData.data[i] = refcog(i);
+          m_debugData.data[i+3] = act_cog(i);
+          m_debugData.data[i+6] = refcog_vel(i);
+          m_debugData.data[i+9] = act_cog_vel(i);
+          m_debugData.data[i+12] = refzmp(i);
+          m_debugData.data[i+15] = act_zmp(i);
+          m_debugData.data[i+18] = cog(i);
+          m_debugData.data[i+21] = tmpzmp(i);
+          m_debugData.data[i+24] = actrpy(i);
+          m_debugData.data[i+27] = currpy(i);
+          m_debugData.data[i+30] = 0;
+          m_debugData.data[i+33] = 0;
+          m_debugData.data[36] = 0;
+        }
       }
 
       //rpy control
