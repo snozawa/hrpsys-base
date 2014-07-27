@@ -53,7 +53,7 @@ module OpenHRP
      * @return
      */
     void stopStabilizer();
-    boolean dummy();
+    boolean dummy(in string i_param);
   };
 };
 

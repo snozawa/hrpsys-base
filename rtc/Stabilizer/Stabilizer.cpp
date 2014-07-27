@@ -54,6 +54,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_qRefOut("q", m_qRef),
     m_tauOut("tau", m_tau),
     m_zmpOut("zmp", m_zmp),
+    m_debugDataOut("debugData", m_debugData),
     control_mode(MODE_IDLE),
     // </rtc-template>
     m_debugLevel(0)
@@ -90,6 +91,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("q", m_qRefOut);
   addOutPort("tau", m_tauOut);
   addOutPort("zmp", m_zmpOut);
+  addOutPort("debugData", m_debugDataOut);
   
   // Set service provider to Ports
   m_StabilizerServicePort.registerProvider("service0", "StabilizerService", m_service0);
@@ -189,6 +191,9 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   qrefv.resize(m_robot->numJoints());
   transition_count = 0;
   loop = 0;
+
+  // debugData
+  m_debugData.data.length(3*3*2); // 3dim * cog, cog-vel, zmp * (act+ref)
 
   return RTC::RTC_OK;
 }
@@ -343,6 +348,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
     m_zmp.data.y = rel_act_zmp(1);
     m_zmp.data.z = rel_act_zmp(2);
     m_zmpOut.write();
+    m_debugDataOut.write();
     //m_tauOut.write();
   }
 
@@ -1144,6 +1150,10 @@ void Stabilizer::waitSTTransition()
   while (transition_count != 0) usleep(10);
   usleep(10);
 }
+
+bool Stabilizer::dummy(const char * i_param)
+{
+};
 
 static double vlimit(double value, double llimit_value, double ulimit_value)
 {

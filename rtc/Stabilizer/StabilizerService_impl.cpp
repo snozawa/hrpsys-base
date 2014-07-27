@@ -32,9 +32,10 @@ void StabilizerService_impl::setParameter(const OpenHRP::StabilizerService::stPa
 	m_stabilizer->setParameter(i_stp);
 }
 
-bool StabilizerService_impl::dummy()
+bool StabilizerService_impl::dummy (const char *i_name_)
 {
 	std::cout << "StabilizerService: " << std::endl;
+	m_stabilizer->dummy(i_name_);
 }
 
 void StabilizerService_impl::stabilizer(Stabilizer *i_stabilizer)

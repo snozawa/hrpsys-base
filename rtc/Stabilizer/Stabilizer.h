@@ -121,6 +121,7 @@ class Stabilizer
   void getFootmidCoords (rats::coordinates& ret);
   double calcDampingControl (const double tau_d, const double tau, const double prev_d,
                              const double DD, const double TT);
+  bool dummy (const char* i_param);
 
  protected:
   // Configuration variable declaration
@@ -137,6 +138,7 @@ class Stabilizer
   RTC::TimedPoint3D m_zmp;
   RTC::TimedPoint3D m_basePos;
   RTC::TimedOrientation3D m_baseRpy;
+  RTC::TimedDoubleSeq m_debugData;
   
   // DataInPort declaration
   // <rtc-template block="inport_declare">
@@ -156,6 +158,7 @@ class Stabilizer
   RTC::OutPort<RTC::TimedDoubleSeq> m_qRefOut;
   RTC::OutPort<RTC::TimedDoubleSeq> m_tauOut;
   RTC::OutPort<RTC::TimedPoint3D> m_zmpOut;
+  RTC::OutPort<RTC::TimedDoubleSeq> m_debugDataOut;
   
   // </rtc-template>
 
