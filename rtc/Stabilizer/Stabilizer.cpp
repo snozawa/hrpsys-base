@@ -481,15 +481,28 @@ void Stabilizer::getActualParameters ()
     m_robot->joint(i)->q = m_qCurrent.data[i];
   }
   // tempolary
+  m_robot->rootLink()->p = hrp::Vector3(0,0,0);
+  hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
+  hrp::Matrix33 senR = sen->link->R * sen->localR;
+  hrp::Matrix33 act_Rs(hrp::rotFromRpy(m_rpy.data.r, m_rpy.data.p, m_rpy.data.y));
+  m_robot->rootLink()->R = act_Rs * (senR.transpose() * m_robot->rootLink()->R);
   m_robot->calcForwardKinematics();
-  fixLegToCoords(":both", target_foot_midcoords);
+  //fixLegToCoords(":both", target_foot_midcoords);
   hrp::Vector3 foot_origin_pos;
   hrp::Matrix33 foot_origin_rot;
   rats::coordinates leg_c[2], tmpc;
+  hrp::Vector3 ez = hrp::Vector3(0,0,1);
   for (size_t i = 0; i < 2; i++) {
     hrp::Link* target = m_robot->sensor<hrp::ForceSensor>(sensor_names[i])->link;
     leg_c[i].pos = target->p;
-    leg_c[i].rot = target->R;
+    hrp::Vector3 vv = (target->R * ez).cross(ez);
+    if (fabs(vv.norm()-0.0) < 1e-5) {
+      leg_c[i].rot = target->R;
+    } else {
+      hrp::Matrix33 tmpr;
+      rats::rotation_matrix(tmpr, std::asin(vv.norm()), vv.normalized());
+      leg_c[i].rot = (tmpr * target->R);
+    }
   }
   rats::mid_coords(tmpc, 0.5, leg_c[0], leg_c[1]);
   foot_origin_pos = tmpc.pos;
@@ -497,7 +510,7 @@ void Stabilizer::getActualParameters ()
   // cog
   act_cog = m_robot->calcCM();
   act_cog_vel = (act_cog - prev_act_cog)/dt;
-  act_cog_vel = 0.5 * prev_act_cog_vel + 0.5 * act_cog_vel;
+  act_cog_vel = 0.8 * prev_act_cog_vel + 0.2 * act_cog_vel;
   prev_act_cog = act_cog;
   prev_act_cog_vel = act_cog_vel;
   // zmp
@@ -569,7 +582,7 @@ void Stabilizer::getTargetParameters ()
   zmp_origin_off = refzmp(2) - foot_origin_pos(2);
   refzmp = foot_origin_rot.transpose() * (refzmp - foot_origin_pos);
   refcog = foot_origin_rot.transpose() * (refcog - foot_origin_pos);
-  refcog_vel = foot_origin_rot.transpose() * refcog_vel;
+  //refcog_vel = foot_origin_rot.transpose() * refcog_vel;
 
   /* return to the original state */
   if ( !(control_mode == MODE_IDLE || control_mode == MODE_AIR) ) {
