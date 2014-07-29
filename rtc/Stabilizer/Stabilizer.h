@@ -104,10 +104,11 @@ class Stabilizer
   void startStabilizer(void);
   void stopStabilizer(void);
   void getCurrentParameters ();
+  void getActualParameters ();
   void getTargetParameters ();
   void sync_2_st ();
   void sync_2_idle();
-  bool calcZMP(hrp::Vector3& ret_zmp);
+  bool calcZMP(hrp::Vector3& ret_zmp, const double zmp_z);
   void calcRUNST();
   void calcTPCC();
   void calcEEForceMomentControl();
@@ -121,6 +122,9 @@ class Stabilizer
   void getFootmidCoords (rats::coordinates& ret);
   double calcDampingControl (const double tau_d, const double tau, const double prev_d,
                              const double DD, const double TT);
+  double calcAlpha (const hrp::Vector3& new_refzmp, const double ledge, const double redge);
+  void calcRefForceMoment(const hrp::Vector3& new_refzmp);
+  void calcRefForceMoment ();
 
  protected:
   // Configuration variable declaration
@@ -137,6 +141,7 @@ class Stabilizer
   RTC::TimedPoint3D m_zmp;
   RTC::TimedPoint3D m_basePos;
   RTC::TimedOrientation3D m_baseRpy;
+  RTC::TimedDoubleSeq m_debugData;
   
   // DataInPort declaration
   // <rtc-template block="inport_declare">
@@ -156,6 +161,7 @@ class Stabilizer
   RTC::OutPort<RTC::TimedDoubleSeq> m_qRefOut;
   RTC::OutPort<RTC::TimedDoubleSeq> m_tauOut;
   RTC::OutPort<RTC::TimedPoint3D> m_zmpOut;
+  RTC::OutPort<RTC::TimedDoubleSeq> m_debugDataOut;
   
   // </rtc-template>
 
@@ -209,7 +215,7 @@ class Stabilizer
   hrp::Vector3 d_foot_rpy[2];
   rats::coordinates target_foot_midcoords;
   double zctrl;
-  hrp::Vector3 refzmp, refcog, refcog_vel;
+  hrp::Vector3 refzmp, refcog, refcog_vel, act_cog, act_cog_vel;
   // TPCC
   double k_tpcc_p[2], k_tpcc_x[2], d_rpy[2], k_brot_p[2], k_brot_tc[2];
   hrp::Vector3 act_zmp, rel_act_zmp, prefcog, prev_act_cog, prev_act_cog_vel;
@@ -223,6 +229,15 @@ class Stabilizer
   // EEFM ST
   double eefm_k1[2], eefm_k2[2], eefm_k3[2];
   double eefm_rot_damping_gain, eefm_rot_time_const, eefm_pos_damping_gain, eefm_pos_time_const;
+  // eefm
+  bool on_ground;
+  double zmp_origin_off;
+//   hrp::Vector3 foot_origin_pos;
+  hrp::Vector3 ee_pos[2];
+  hrp::Matrix33 act_root_rot;
+  hrp::Vector3 ref_foot_force[2];
+  hrp::Vector3 ref_foot_moment[2];
+  hrp::Vector3 tau_0, new_refzmp;
 };
 
 
