@@ -30,13 +30,13 @@ static const char* stabilizer_spec[] =
     "language",          "C++",
     "lang_type",         "compile",
     // Configuration variables
-    "conf.default.debugLevel", "1",
+    "conf.default.debugLevel", "0",
     ""
   };
 // </rtc-template>
 
 #define MAX_TRANSITION_COUNT (2/dt)
-//#define USE_IMU_STATEFEEDBACK
+#define USE_IMU_STATEFEEDBACK
 static double vlimit(double value, double llimit_value, double ulimit_value);
 static double switching_inpact_absorber(double force, double lower_th, double upper_th);
 
@@ -52,6 +52,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_StabilizerServicePort("StabilizerService"),
     m_basePosIn("basePosIn", m_basePos),
     m_baseRpyIn("baseRpyIn", m_baseRpy),
+    m_walkPhaseIn("walkPhase", m_walkPhase),
     m_qRefOut("q", m_qRef),
     m_tauOut("tau", m_tau),
     m_zmpOut("zmp", m_zmp),
@@ -65,6 +66,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_originActCogVelOut("originActCogVel", m_originActCogVel),
     m_refWrenchROut("refWrenchR", m_refWrenchR),
     m_refWrenchLOut("refWrenchL", m_refWrenchL),
+    m_debugDataOut("debugData", m_debugData),
     control_mode(MODE_IDLE),
     // </rtc-template>
     m_debugLevel(0)
@@ -96,6 +98,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addInPort("zmpRef", m_zmpRefIn);
   addInPort("basePosIn", m_basePosIn);
   addInPort("baseRpyIn", m_baseRpyIn);
+  addInPort("walkPhase", m_walkPhaseIn);
 
   // Set OutPort buffer
   addOutPort("q", m_qRefOut);
@@ -111,6 +114,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("originActCogVel", m_originActCogVelOut);
   addOutPort("refWrenchR", m_refWrenchROut);
   addOutPort("refWrenchL", m_refWrenchLOut);
+  addOutPort("debugData", m_debugDataOut);
   
   // Set service provider to Ports
   m_StabilizerServicePort.registerProvider("service0", "StabilizerService", m_service0);
@@ -190,6 +194,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   eefm_rot_time_const = 1;
   eefm_pos_damping_gain = 3500;
   eefm_pos_time_const = 1;
+  eefm_ZMP_delay_time_const[0] = eefm_ZMP_delay_time_const[1] = 0.04;
 
   // parameters for RUNST
   double ke = 0, tc = 0;
@@ -201,6 +206,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   pangx_ref = pangy_ref = pangx = pangy = 0;
   rdx = rdy = rx = ry = 0;
   pdr = hrp::Vector3::Zero();
+  prev_act_force_z[0] = prev_act_force_z[1] = 0.0;
 
   sensor_names.push_back("rfsensor");
   sensor_names.push_back("lfsensor");
@@ -225,6 +231,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     zmp_origin_off = ee_map[m_robot->sensor<hrp::ForceSensor>(sensor_names[0])->link->name].localp(2);
   }
   total_mass = m_robot->totalMass();
+  ref_zmp_aux = hrp::Vector3::Zero();
 
   // for debug output
   m_originRefZmp.data.x = m_originRefZmp.data.y = m_originRefZmp.data.z = 0.0;
@@ -237,6 +244,31 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   m_refWrenchR.data.length(6); m_refWrenchL.data.length(6);
   m_refWrenchR.data[0] = m_refWrenchR.data[1] = m_refWrenchR.data[2] = m_refWrenchR.data[3] = m_refWrenchR.data[4] = m_refWrenchR.data[5] = 0.0;
   m_refWrenchL.data[0] = m_refWrenchL.data[1] = m_refWrenchL.data[2] = m_refWrenchL.data[3] = m_refWrenchL.data[4] = m_refWrenchL.data[5] = 0.0;
+  m_debugData.data.length(3+3+3+3+1);
+  // proj_new_refzmp, p_new_zmp
+  // edge_foot[0], edge_foot[1]
+  // alpha
+
+  // foot polygon vertices
+  {
+    // rleg
+    std::vector<hrp::Vector3> tmp_vs;
+    tmp_vs.push_back(hrp::Vector3(0.13, 0.065, 0.0));
+    tmp_vs.push_back(hrp::Vector3(-0.10, 0.065, 0.0));
+    tmp_vs.push_back(hrp::Vector3(-0.10, -0.06, 0.0));
+    tmp_vs.push_back(hrp::Vector3(0.13, -0.06, 0.0));
+    foot_polygon_vertices.push_back(tmp_vs);
+  }
+  {
+    // lleg
+    std::vector<hrp::Vector3> tmp_vs;
+    tmp_vs.push_back(hrp::Vector3(0.13, 0.06, 0.0));
+    tmp_vs.push_back(hrp::Vector3(-0.10, 0.06, 0.0));
+    tmp_vs.push_back(hrp::Vector3(-0.10, -0.065, 0.0));
+    tmp_vs.push_back(hrp::Vector3(0.13, -0.065, 0.0));
+    foot_polygon_vertices.push_back(tmp_vs);
+  }
+  prev_walkPhase = 2;
 
   return RTC::RTC_OK;
 }
@@ -266,6 +298,7 @@ RTC::ReturnCode_t Stabilizer::onShutdown(RTC::UniqueId ec_id)
 RTC::ReturnCode_t Stabilizer::onActivated(RTC::UniqueId ec_id)
 {
   std::cout << m_profile.instance_name<< ": onActivated(" << ec_id << ")" << std::endl;
+  loop=0;
   return RTC::RTC_OK;
 }
 
@@ -280,6 +313,7 @@ bool Stabilizer::calcZMP(hrp::Vector3& ret_zmp, const double zmp_z)
   double tmpzmpx = 0;
   double tmpzmpy = 0;
   double tmpfz = 0;
+  double tmpfz2[2];
   for (size_t i = 0; i < 2; i++) {
     hrp::ForceSensor* sensor = m_robot->sensor<hrp::ForceSensor>(sensor_names[i]);
     hrp::Vector3 fsp = sensor->link->p + sensor->link->R * sensor->localPos;
@@ -290,8 +324,11 @@ bool Stabilizer::calcZMP(hrp::Vector3& ret_zmp, const double zmp_z)
     tmpzmpx += nf(2) * fsp(0) - (fsp(2) - zmp_z) * nf(0) - nm(1);
     tmpzmpy += nf(2) * fsp(1) - (fsp(2) - zmp_z) * nf(1) + nm(0);
     tmpfz += nf(2);
+    tmpfz2[i] = 0.85 * prev_act_force_z[i] + 0.15 * nf(2); // filter
+    prev_act_force_z[i] = tmpfz2[i];
   }
-  if (tmpfz < 50) {
+  //if (tmpfz < 50) {
+  if (tmpfz2[0] < 50 && tmpfz2[1] < 50) {
     ret_zmp = act_zmp;
     return false; // in the air
   } else {
@@ -331,6 +368,9 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
   if (m_baseRpyIn.isNew()){
     m_baseRpyIn.read();
   }
+  if (m_walkPhaseIn.isNew()){
+    m_walkPhaseIn.read();
+  }
 
   if (is_legged_robot) {
     getCurrentParameters();
@@ -347,8 +387,8 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
     case MODE_ST:
       // if (DEBUGP2) std::cerr << "ST"<< std::endl;
       //calcRUNST();
-      calcTPCC();
-      //calcEEForceMomentControl();
+      //calcTPCC();
+      calcEEForceMomentControl();
       if ( transition_count == 0 && !on_ground ) control_mode = MODE_SYNC_TO_AIR;
       break;
     case MODE_SYNC_TO_IDLE:
@@ -395,6 +435,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_originActCogOut.write();
       m_originActCogVelOut.write();
       m_refWrenchROut.write(); m_refWrenchLOut.write();
+      m_debugDataOut.write();
     }
     m_qRefOut.write();
   }
@@ -535,10 +576,18 @@ void Stabilizer::calcFootOriginCoords (hrp::Vector3& foot_origin_pos, hrp::Matri
     xv2(2)=0.0;
     xv2.normalize();
     leg_c[i].rot = OrientRotationMatrix(leg_c[i].rot, xv1, xv2);
+ }
+  if (m_walkPhase.data == 2) {
+    foot_origin_pos = leg_c[1].pos;
+    foot_origin_rot = leg_c[1].rot;
+  } else if (m_walkPhase.data == 1) {
+    foot_origin_pos = leg_c[0].pos;
+    foot_origin_rot = leg_c[0].rot;
+  } else {
+    rats::mid_coords(tmpc, 0.5, leg_c[0], leg_c[1]);
+    foot_origin_pos = tmpc.pos;
+    foot_origin_rot = tmpc.rot;
   }
-  rats::mid_coords(tmpc, 0.5, leg_c[0], leg_c[1]);
-  foot_origin_pos = tmpc.pos;
-  foot_origin_rot = tmpc.rot;
 }
 
 void Stabilizer::getActualParameters ()
@@ -587,11 +636,16 @@ void Stabilizer::getActualParameters ()
   act_zmp = foot_origin_rot.transpose() * (act_zmp - foot_origin_pos);
   act_cog = foot_origin_rot.transpose() * (act_cog - foot_origin_pos);
   //act_cogvel = foot_origin_rot.transpose() * act_cogvel;
-  act_cogvel = (act_cog - prev_act_cog)/dt;
+  if (m_walkPhase.data != prev_walkPhase) {
+    act_cogvel = (foot_origin_rot.transpose() * prev_act_foot_origin_rot) * act_cogvel;
+  } else {
+    act_cogvel = (act_cog - prev_act_cog)/dt;
+  }
   //act_cogvel = 0.8 * prev_act_cogvel + 0.2 * act_cogvel;
   act_cogvel = 0.9 * prev_act_cogvel + 0.1 * act_cogvel;
   prev_act_cog = act_cog;
   prev_act_cogvel = act_cogvel;
+  prev_act_foot_origin_rot = foot_origin_rot;
   //act_root_rot = m_robot->rootLink()->R;
 
   // new ZMP calculation
@@ -601,7 +655,8 @@ void Stabilizer::getActualParameters ()
   hrp::Vector3 dzmp=foot_origin_rot * (ref_zmp - act_zmp);
   new_refzmp = foot_origin_rot * new_refzmp + foot_origin_pos;
   for (size_t i = 0; i < 2; i++) {
-    new_refzmp(i) += eefm_k1[i] * transition_smooth_gain * dcog(i) + eefm_k2[i] * transition_smooth_gain * dcogvel(i) + eefm_k3[i] * transition_smooth_gain * dzmp(i);
+    //new_refzmp(i) += eefm_k1[i] * transition_smooth_gain * dcog(i) + eefm_k2[i] * transition_smooth_gain * dcogvel(i) + eefm_k3[i] * transition_smooth_gain * dzmp(i);
+    new_refzmp(i) += eefm_k1[i] * transition_smooth_gain * dcog(i) + eefm_k2[i] * transition_smooth_gain * dcogvel(i) + eefm_k3[i] * transition_smooth_gain * dzmp(i) + ref_zmp_aux(i);
   }
   if (DEBUGP) {
     std::cerr << "COG [" << ref_cog(0)*1e3 << " " << ref_cog(1)*1e3 << " " << ref_cog(2)*1e3 << "] [" << act_cog(0)*1e3 << " " << act_cog(1)*1e3 << " " << act_cog(2)*1e3 << "]" << std::endl;
@@ -631,8 +686,13 @@ void Stabilizer::getActualParameters ()
       alpha = fabs(new_refzmp(1) - ledge)/ fabs(ledge-redge);
     }
     if (DEBUGP) {
+      //std::cerr << "alpha2 [" << calcAlpha() << "]" << std::endl;
       std::cerr << "alpha [" << alpha << "]" << std::endl;
     }
+//     alpha = calcAlpha();
+//     if (DEBUGP) {
+//       std::cerr << "alpha2 [" << alpha << "]" << std::endl;
+//     }
     ref_foot_force[0] = hrp::Vector3(0,0, alpha * 9.8 * total_mass);
     ref_foot_force[1] = hrp::Vector3(0,0, (1-alpha) * 9.8 * total_mass);
     for (size_t i = 0; i < 2; i++) {
@@ -645,18 +705,40 @@ void Stabilizer::getActualParameters ()
       ref_foot_moment[1] = hrp::Vector3::Zero();
       ref_foot_moment[0] = -1 * (ee_pos[0] - new_refzmp).cross(ref_foot_force[0]);
     } else { // double support
+      //
+      hrp::Vector3 foot_dist_coords_y = (ee_pos[1] - ee_pos[0]); // e_y'
+      foot_dist_coords_y(2) = 0.0;
+      foot_dist_coords_y.normalize();
+      hrp::Vector3 foot_dist_coords_x = hrp::Vector3(foot_dist_coords_y.cross(hrp::Vector3::UnitZ())); // e_x'
+      hrp::Matrix33 foot_dist_coords_rot;
+      foot_dist_coords_rot(0,0) = foot_dist_coords_x(0);
+      foot_dist_coords_rot(1,0) = foot_dist_coords_x(1);
+      foot_dist_coords_rot(2,0) = foot_dist_coords_x(2);
+      foot_dist_coords_rot(0,1) = foot_dist_coords_y(0);
+      foot_dist_coords_rot(1,1) = foot_dist_coords_y(1);
+      foot_dist_coords_rot(2,1) = foot_dist_coords_y(2);
+      foot_dist_coords_rot(0,2) = 0;
+      foot_dist_coords_rot(1,2) = 0;
+      foot_dist_coords_rot(2,2) = 1;
+      hrp::Vector3 tau_0_f = foot_dist_coords_rot.transpose() * tau_0; // tau_0'
+      //hrp::Vector3 tau_0_f = tau_0;
       // x
       // right
-      if (tau_0(0) > 0) ref_foot_moment[0](0) = tau_0(0);
+      if (tau_0_f(0) > 0) ref_foot_moment[0](0) = tau_0_f(0);
       else ref_foot_moment[0](0) = 0;
       // left
-      if (tau_0(0) > 0) ref_foot_moment[1](0) = 0;
-      else ref_foot_moment[1](0) = tau_0(0);
+      if (tau_0_f(0) > 0) ref_foot_moment[1](0) = 0;
+      else ref_foot_moment[1](0) = tau_0_f(0);
       // y
-      ref_foot_moment[0](1) = tau_0(1) * alpha;
-      ref_foot_moment[1](1) = tau_0(1) * (1-alpha);
+      ref_foot_moment[0](1) = tau_0_f(1) * alpha;
+      ref_foot_moment[1](1) = tau_0_f(1) * (1-alpha);
       ref_foot_moment[0](2) = ref_foot_moment[1](2) = 0.0;
+      // foot_dist_coords local => world
+      ref_foot_moment[0] = foot_dist_coords_rot * ref_foot_moment[0];
+      ref_foot_moment[1] = foot_dist_coords_rot * ref_foot_moment[1];
     }
+    ref_foot_moment[0] = foot_origin_rot.transpose() * ref_foot_moment[0];
+    ref_foot_moment[1] = foot_origin_rot.transpose() * ref_foot_moment[1];
     if (DEBUGP) {
       std::cerr << "tau [" << tau_0(0) << " " << tau_0(1) << " " << tau_0(2) << "]" << std::endl;
       std::cerr << "fR [" << ref_foot_force[0](0) << " " << ref_foot_force[0](1) << " " << ref_foot_force[0](2) << "]" << std::endl;
@@ -687,6 +769,7 @@ void Stabilizer::getActualParameters ()
       hrp::Vector3 sensor_force = (sensor->link->R * sensor->localR) * hrp::Vector3(m_force[i].data[0], m_force[i].data[1], m_force[i].data[2]);
       hrp::Vector3 sensor_moment = (sensor->link->R * sensor->localR) * hrp::Vector3(m_force[i].data[3], m_force[i].data[4], m_force[i].data[5]);
       hrp::Vector3 ee_moment = (sensor->link->R * (sensor->localPos - ee_map[sensor->link->name].localp)).cross(sensor_force) + sensor_moment;
+      ee_moment = foot_origin_rot.transpose() * ee_moment;
       fz_diff += (i==0? -sensor_force(2) : sensor_force(2));
       fz[i] = sensor_force(2);
       // calcDampingControl
@@ -732,6 +815,7 @@ void Stabilizer::getActualParameters ()
     m_robot->rootLink()->R = current_root_R;
     m_robot->calcForwardKinematics();
   }
+  prev_walkPhase = m_walkPhase.data;
 }
 
 void Stabilizer::getTargetParameters ()
@@ -765,6 +849,9 @@ void Stabilizer::getTargetParameters ()
   m_robot->rootLink()->R = target_root_R;
   m_robot->calcForwardKinematics();
   ref_zmp = hrp::Vector3(m_zmpRef.data.x, m_zmpRef.data.y, m_zmpRef.data.z);
+  hrp::Vector3 tmp_ref_zmp = ref_zmp + eefm_ZMP_delay_time_const[0] * (ref_zmp - prev_ref_zmp) / dt;
+  prev_ref_zmp = ref_zmp;
+  ref_zmp = tmp_ref_zmp;
   ref_cog = m_robot->calcCM();
 
   for (size_t i = 0; i < 2; i++) {
@@ -788,7 +875,12 @@ void Stabilizer::getTargetParameters ()
   ref_cog = foot_origin_rot.transpose() * (ref_cog - foot_origin_pos);
   new_refzmp = foot_origin_rot.transpose() * (new_refzmp - foot_origin_pos);
 #endif
-  ref_cogvel = (ref_cog - prev_ref_cog)/dt;
+  if (m_walkPhase.data != prev_walkPhase) {
+    ref_cogvel = (foot_origin_rot.transpose() * prev_ref_foot_origin_rot) * ref_cogvel;
+  } else {
+    ref_cogvel = (ref_cog - prev_ref_cog)/dt;
+  }
+  prev_ref_foot_origin_rot = foot_origin_rot;
   prev_ref_cog = ref_cog;
 }
 
@@ -877,7 +969,7 @@ void Stabilizer::calcEEForceMomentControl() {
       //rpy control
       rats::rotm3times(current_root_R, target_root_R, hrp::rotFromRpy(d_rpy[0], d_rpy[1], 0));
       m_robot->rootLink()->R = current_root_R;
-      // m_robot->rootLink()->p = target_root_p + target_root_R * rel_cog - current_root_R * rel_cog;
+      m_robot->rootLink()->p = target_root_p + target_root_R * rel_cog - current_root_R * rel_cog;
       m_robot->calcForwardKinematics();
 
       // foor modif
@@ -916,6 +1008,8 @@ void Stabilizer::calcEEForceMomentControl() {
           hrp::Vector3 vel_p, vel_r;
           vel_p = total_target_foot_p[i] - target->p;
           rats::difference_rotation(vel_r, target->R, total_target_foot_R[i]);
+          vel_p *= transition_smooth_gain;
+          vel_r *= transition_smooth_gain;
           manip2[i]->calcInverseKinematics2Loop(vel_p, vel_r, 1.0, 0.001, 0.01, &qrefv);
         }
       }
@@ -928,6 +1022,116 @@ double Stabilizer::calcDampingControl (const double tau_d, const double tau, con
 {
   return (1/DD * (tau_d - tau) - 1/TT * prev_d) * dt + prev_d;
 };
+
+int Stabilizer::calcPolygonSection (const hrp::Vector3& _foot_pos, const hrp::Vector3& _new_refzmp,
+                                    const std::vector<hrp::Vector3>& vertices)
+{
+  const hrp::Vector3 dv = _new_refzmp - _foot_pos;
+  if (dv.norm() < 1e-7) {
+    return -1;
+  } else {
+    for (int i = 0; i < vertices.size(); i++) {
+      if ( (((vertices[((1+i)==vertices.size())?0:(1+i)] - _foot_pos).cross(dv))(2) < 0.0) &&
+           (((vertices[i]-_foot_pos).cross(dv))(2) >= 0.0) ) {
+        return i;
+      }
+    }
+  }
+  return -1;
+}
+
+// copied
+void Stabilizer::find_foot(const hrp::Vector3& ip,
+                           const hrp::Vector3& pt1,
+                           const hrp::Vector3& pt2,
+                           hrp::Vector3& f)
+{
+  const hrp::Vector3 pt(pt2 - pt1);
+  const double p = pt.dot(ip - pt1) / pt.dot(pt);
+  f = pt1 + p * pt;
+}
+
+bool Stabilizer::calcPolygonEdgeFoot (hrp::Vector3& edge_foot,
+                                      const size_t idx,
+                                      const hrp::Vector3& _foot_pos, const hrp::Vector3& _new_refzmp,
+                                      const std::vector<hrp::Vector3>& vertices)
+{
+  size_t idx_1, idx_2;
+  if ((1+idx)==vertices.size()) {
+    idx_1 = 0;
+    idx_2 = 1;
+  } else if ((2+idx)==vertices.size()) {
+    idx_1 = 1+idx;
+    idx_2 = 0;
+  } else {
+    idx_1 = 1+idx;
+    idx_2 = 2+idx;
+  }
+  hrp::Vector3 d1 = _new_refzmp - vertices[idx_1];
+  hrp::Vector3 d2 = vertices[idx] - vertices[idx_1];
+  hrp::Vector3 d3 = vertices[idx_1] - vertices[idx_2];
+//   std::cerr << " in calcPEF [" << _new_refzmp(0) << " " << _new_refzmp(1) << "]" << std::endl;
+//   std::cerr << " in calcPEF [" << vertices[idx_1](0) << " " << vertices[idx_1](1) << "]" << std::endl;
+//   std::cerr << " in calcPEF [" << vertices[idx](0) << " " << vertices[idx](1) << "]" << std::endl;
+//   std::cerr << " in calcPEF [" << vertices[idx_2](0) << " " << vertices[idx_2](1) << "]" << std::endl;
+  if (std::fabs((vertices[idx]-_foot_pos).cross(_new_refzmp-_foot_pos)(2)) < 1e-7) {
+    find_foot(_new_refzmp, vertices[idx], vertices[idx_1], edge_foot);
+  } else if ( d1.cross(d2)(2) >= 0.0 ) {
+    return false;
+  } else if ( d2.cross(d1)(2) > 0.0 && d1.cross(d3)(2) >= 0.0 ) {
+    find_foot(_new_refzmp, vertices[idx], vertices[idx_1], edge_foot);
+  } else {
+    hrp::Vector3 f1, f2;
+    find_foot(_new_refzmp, vertices[idx], vertices[idx_1], f1);
+    find_foot(_new_refzmp, vertices[idx_1], vertices[idx_2], f2);
+    if ((f1-_new_refzmp).norm() > (f2-_new_refzmp).norm()) {
+      edge_foot = f1;
+    } else {
+      edge_foot = f2;
+    }
+  }
+  return true;
+}
+
+double Stabilizer::calcAlpha ()
+{
+  hrp::Vector3 edge_foot[2];
+  hrp::Vector3 projected_new_refzmp = new_refzmp;
+  for (size_t i = 0; i < 2; i++) {
+    hrp::Link* target = m_robot->sensor<hrp::ForceSensor>(sensor_names[i])->link;
+    hrp::Vector3 ee_pos = target->p + target->R * ee_map[target->name].localp;
+    hrp::Matrix33 ee_rot = target->R * ee_map[target->name].localR;
+    std::vector<hrp::Vector3> projected_polygon_vertices;
+    hrp::Vector3 tmpv;
+    for (size_t pidx = 0; pidx < foot_polygon_vertices[i].size(); pidx++) {
+      tmpv = ee_rot * foot_polygon_vertices[i][pidx] + ee_pos;
+      projected_polygon_vertices.push_back(hrp::Vector3(tmpv(0), tmpv(1), projected_new_refzmp(2)));
+    }
+    ee_pos(2) = projected_new_refzmp(2);
+    int idx = calcPolygonSection(ee_pos, projected_new_refzmp, projected_polygon_vertices);
+    if (DEBUGP) std::cerr << "in calcAlpha " << i << " idx " << idx << std::endl;
+    if (idx == -1) { // ee_pos == new_refzmp
+      m_debugData.data[3+3+3+3] = (i==0?1.0:0.0);
+      return (i==0?1.0:0.0); // i==0:rleg => alpha=1.0
+    } else {
+      bool is_outside = calcPolygonEdgeFoot(edge_foot[i], idx, ee_pos, projected_new_refzmp, projected_polygon_vertices);
+      if (DEBUGP) std::cerr << "in calcAlpha " << i << " outside " << is_outside << std::endl;
+      if (is_outside == false) { // inside polygon
+        m_debugData.data[3+3+3+3] = (i==0?1.0:0.0);
+        return (i==0?1.0:0.0); // i==0:rleg=>alpha=1.0
+      }
+    }
+  }
+  // two edge_foot are found
+  hrp::Vector3 p_new_refzmp;
+  find_foot(projected_new_refzmp, edge_foot[0], edge_foot[1], p_new_refzmp);
+  m_debugData.data[3+3+3+3] = (p_new_refzmp-edge_foot[1]).norm()/(edge_foot[0]-edge_foot[1]).norm();
+  for (size_t i = 0; i<3;i++) m_debugData.data[i] = projected_new_refzmp(i);
+  for (size_t i = 0; i<3;i++) m_debugData.data[i+3] = p_new_refzmp(i);
+  for (size_t i = 0; i<3;i++) m_debugData.data[i+6] = edge_foot[0](i);
+  for (size_t i = 0; i<3;i++) m_debugData.data[i+9] = edge_foot[1](i);
+  return (p_new_refzmp-edge_foot[1]).norm()/(edge_foot[0]-edge_foot[1]).norm();
+}
 
 void Stabilizer::calcRUNST() {
   if ( m_robot->numJoints() == m_qRef.data.length() ) {
@@ -1156,8 +1360,11 @@ void Stabilizer::sync_2_st ()
   d_rpy[0] = d_rpy[1] = 0;
   transition_count = -MAX_TRANSITION_COUNT;
   pdr = hrp::Vector3::Zero();
-  prev_act_cogvel = hrp::Vector3::Zero();
-  prev_ref_cog = m_robot->calcCM();
+  //prev_act_cogvel = hrp::Vector3::Zero();
+  //prev_ref_cog = m_robot->calcCM();
+  //prev_act_cog = ref_cog;
+  zctrl = f_zctrl[0] = f_zctrl[1] = 0.0;
+  d_foot_rpy[0] = d_foot_rpy[0] = hrp::Vector3::Zero();
   control_mode = MODE_ST;
 }
 
@@ -1173,9 +1380,6 @@ void Stabilizer::startStabilizer(void)
 {
   if ( transition_count == 0 && control_mode == MODE_IDLE ) {
     std::cerr << "START ST"  << std::endl;
-    d_foot_rpy[0](0) = d_foot_rpy[0](1) = d_foot_rpy[1](0) = d_foot_rpy[1](1) = 0.0;
-    prev_act_cog = ref_cog;
-    zctrl = f_zctrl[0] = f_zctrl[1] = 0.0;
     sync_2_st();
     waitSTTransition();
     std::cerr << "START ST DONE"  << std::endl;
@@ -1213,6 +1417,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
     i_stp.eefm_k1[i] = eefm_k1[i];
     i_stp.eefm_k2[i] = eefm_k2[i];
     i_stp.eefm_k3[i] = eefm_k3[i];
+    i_stp.eefm_ZMP_delay_time_const[i] = eefm_ZMP_delay_time_const[i];
   }
   i_stp.eefm_rot_damping_gain = eefm_rot_damping_gain;
   i_stp.eefm_pos_damping_gain = eefm_pos_damping_gain;
@@ -1247,12 +1452,15 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
     eefm_k1[i] = i_stp.eefm_k1[i];
     eefm_k2[i] = i_stp.eefm_k2[i];
     eefm_k3[i] = i_stp.eefm_k3[i];
-    std::cerr << i << " eefm_k1 " << eefm_k1[i] << " eefm_k2 " <<  eefm_k2[i] << " eefm_k3 " << eefm_k3[i] << std::endl;
+    eefm_ZMP_delay_time_const[i] = i_stp.eefm_ZMP_delay_time_const[i];
+    std::cerr << i << " eefm_k1 " << eefm_k1[i] << " eefm_k2 " <<  eefm_k2[i] << " eefm_k3 " << eefm_k3[i] << " " << eefm_ZMP_delay_time_const[i] << std::endl;
   }
   eefm_rot_damping_gain = i_stp.eefm_rot_damping_gain;
   eefm_pos_damping_gain = i_stp.eefm_pos_damping_gain;
   eefm_rot_time_const = i_stp.eefm_rot_time_const;
   eefm_pos_time_const = i_stp.eefm_pos_time_const;
+  // temp
+  ref_zmp_aux(0) = i_stp.k_run_x; ref_zmp_aux(1) = i_stp.k_run_y;
   std::cerr << " eefm_rot_damping_gain " << eefm_rot_damping_gain << " eefm_rot_time_const " <<  eefm_rot_time_const << std::endl;
   std::cerr << " eefm_pos_damping_gain " << eefm_pos_damping_gain << " eefm_pos_time_const " <<  eefm_pos_time_const << std::endl;
 }

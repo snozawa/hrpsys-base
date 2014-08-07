@@ -124,6 +124,17 @@ class Stabilizer
   void getFootmidCoords (rats::coordinates& ret);
   double calcDampingControl (const double tau_d, const double tau, const double prev_d,
                              const double DD, const double TT);
+  bool calcPolygonEdgeFoot (hrp::Vector3& edge_foot,
+                            const size_t idx,
+                            const hrp::Vector3& _foot_pos, const hrp::Vector3& _new_refzmp,
+                            const std::vector<hrp::Vector3>& vertices);
+  int calcPolygonSection (const hrp::Vector3& _foot_pos, const hrp::Vector3& _new_refzmp,
+                          const std::vector<hrp::Vector3>& vertices);
+  void find_foot(const hrp::Vector3& ip,
+                 const hrp::Vector3& pt1,
+                 const hrp::Vector3& pt2,
+                 hrp::Vector3& f);
+  double calcAlpha ();
 
  protected:
   // Configuration variable declaration
@@ -140,10 +151,12 @@ class Stabilizer
   RTC::TimedPoint3D m_zmp;
   RTC::TimedPoint3D m_basePos;
   RTC::TimedOrientation3D m_baseRpy;
+  RTC::TimedLong m_walkPhase;
   // for debug ouput
   RTC::TimedPoint3D m_originRefZmp, m_originRefCog, m_originRefCogVel, m_originNewZmp;
   RTC::TimedPoint3D m_originActZmp, m_originActCog, m_originActCogVel;
   RTC::TimedDoubleSeq m_refWrenchR, m_refWrenchL;
+  RTC::TimedDoubleSeq m_debugData;
   
   // DataInPort declaration
   // <rtc-template block="inport_declare">
@@ -155,6 +168,7 @@ class Stabilizer
   RTC::InPort<RTC::TimedPoint3D> m_zmpRefIn;
   RTC::InPort<RTC::TimedPoint3D> m_basePosIn;
   RTC::InPort<RTC::TimedOrientation3D> m_baseRpyIn;
+  RTC::InPort<RTC::TimedLong> m_walkPhaseIn;
   
   // </rtc-template>
 
@@ -167,6 +181,7 @@ class Stabilizer
   RTC::OutPort<RTC::TimedPoint3D> m_originRefZmpOut, m_originRefCogOut, m_originRefCogVelOut, m_originNewZmpOut;
   RTC::OutPort<RTC::TimedPoint3D> m_originActZmpOut, m_originActCogOut, m_originActCogVelOut;
   RTC::OutPort<RTC::TimedDoubleSeq> m_refWrenchROut, m_refWrenchLOut;
+  RTC::OutPort<RTC::TimedDoubleSeq> m_debugDataOut;
   
   // </rtc-template>
 
@@ -213,9 +228,9 @@ class Stabilizer
   int transition_count, loop;
   bool is_legged_robot, on_ground;
   hrp::Vector3 current_root_p, target_foot_p[2], target_root_p;
-  hrp::Matrix33 current_root_R, target_root_R, target_foot_R[2];
-  rats::coordinates target_foot_midcoords;
-  hrp::Vector3 ref_zmp, ref_cog, ref_cogvel, prev_ref_cog;
+  hrp::Matrix33 current_root_R, target_root_R, target_foot_R[2], prev_act_foot_origin_rot, prev_ref_foot_origin_rot;
+  //rats::coordinates target_foot_midcoords;
+  hrp::Vector3 ref_zmp, ref_cog, ref_cogvel, prev_ref_cog, prev_ref_zmp;
   hrp::Vector3 act_zmp, act_cog, act_cogvel, rel_act_zmp, prev_act_cog, prev_act_cogvel;
   double zmp_origin_off, transition_smooth_gain;
   // TPCC
@@ -228,12 +243,14 @@ class Stabilizer
   double k_run_b[2], d_run_b[2];
   double rdx, rdy, rx, ry;
   // EEFM ST
-  double eefm_k1[2], eefm_k2[2], eefm_k3[2];
+  double eefm_k1[2], eefm_k2[2], eefm_k3[2], eefm_ZMP_delay_time_const[2];
   double eefm_rot_damping_gain, eefm_rot_time_const, eefm_pos_damping_gain, eefm_pos_time_const;
-  hrp::Vector3 d_foot_rpy[2], new_refzmp, rel_cog;
+  hrp::Vector3 d_foot_rpy[2], new_refzmp, rel_cog, ref_zmp_aux;
   hrp::Vector3 ref_foot_force[2];
   hrp::Vector3 ref_foot_moment[2];
-  double zctrl, total_mass, f_zctrl[2];
+  double zctrl, total_mass, f_zctrl[2], prev_act_force_z[2];
+  size_t prev_walkPhase;
+  std::vector<std::vector<hrp::Vector3> > foot_polygon_vertices;
 };
 
 
