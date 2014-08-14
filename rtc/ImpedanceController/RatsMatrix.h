@@ -10,29 +10,10 @@ namespace rats
     return fabs((a)-(b)) <= eps;
   };
   hrp::Vector3 matrix_log(const hrp::Matrix33& m);
-  void rotation_matrix(hrp::Matrix33& rm, const double theta, const hrp::Vector3& axis);
-  inline hrp::Matrix33 rotation_matrix(const double theta, const hrp::Vector3& axis) {
-    hrp::Matrix33 ret;
-    rotation_matrix(ret, theta, axis);
-    return ret;
-  }
 
-  void print_vector(std::ostream& strm, const hrp::Vector3& vec, const bool use_newline = true);
-  void print_vector(std::ostream& strm, const hrp::dvector& vec, const bool use_newline = true);
-  void print_matrix(std::ostream& strm, const hrp::Matrix33& mat, const bool use_newline = true);
-  void print_matrix(std::ostream& strm, const hrp::dmatrix& mat, const bool use_newline = true);
   // matrix product using quaternion normalization
   void rotm3times (hrp::Matrix33& m12, const hrp::Matrix33& m1, const hrp::Matrix33& m2);
   void difference_rotation(hrp::Vector3& ret_dif_rot, const hrp::Matrix33& self_rot, const hrp::Matrix33& target_rot);
-
-  // /* implementation of template functions */
-  // void print_vector(std::ostream& strm, const hrp::Vector3& v, const bool use_newline = true) {
-  //   print_vector(strm, v.data(), use_newline);
-  // }
-
-  // void print_matrix(std::ostream& strm, const hrp::Matrix33& m, const bool use_newline = true) {
-  //   print_matrix(strm, m.data(), 3, 3, use_newline);
-  // }
 
   struct coordinates {
     hrp::Vector3 pos;
@@ -50,50 +31,6 @@ namespace rats
         rot = c.rot;
       }
       return *this;
-    }
-    //void print_eus_coordinates(std::ostream& strm, const bool use_newline = true) const; /* for euslisp format print function */
-    void print_eus_coordinates(std::ostream& strm, const bool use_newline = true) const
-    {
-      strm << "#s(coordinates pos "; print_vector(strm, hrp::Vector3(1e3*pos), false);
-      strm << " rot "; print_matrix(strm, rot, false); strm << ")";
-      if (use_newline) strm << std::endl;
-    }
-    void translate(const hrp::Vector3& v, const std::string& wrt = ":local") {
-      if (wrt == ":local") {
-        pos += rot * v;
-      } else if(wrt == ":world") {
-        pos += v;
-      } else {
-        std::cerr << "**** invalid wrt! ****" << std::endl;
-      }
-    }
-    void rotate_vector(hrp::Vector3& ret, const hrp::Vector3 &v) const {
-      ret = rot * v;
-    }
-    void rotate_with_matrix (const hrp::Matrix33& mat, const std::string& wrt = ":local") {
-      hrp::Matrix33 rot_org(rot);
-      if (wrt == ":local") {		  
-        //			alias(rot) = rot * mat;
-        rotm3times(rot, rot_org, mat);
-      } else if(wrt == ":world") {
-        //			alias(rot) = mat * rot;
-        rotm3times(rot, mat, rot_org);
-      } else {
-        std::cerr << "**** invalid wrt! ****" << std::endl;
-      }
-    }
-    void rotate (const double theta, const hrp::Vector3& axis, const std::string& wrt = ":local") {
-      rotate_with_matrix(rotation_matrix(theta, axis), wrt);
-    }
-    void difference_position(hrp::Vector3& dif_pos, const coordinates& c) const {
-      dif_pos =  c.pos - pos;
-    }
-    /* void difference_rotation(hrp::Vector3& dif_rot, const coordinates& c) const { */
-    /*   dif_rot = rot * matrix_log(rot.transpose() * c.rot); */
-    /* } */
-    void difference(hrp::Vector3& dif_pos, hrp::Vector3& dif_rot, const coordinates& c) const {
-      difference_position(dif_pos, c);
-      difference_rotation(dif_rot, rot, c.rot);
     }
     //abc
     void inverse_transformation(coordinates& inv) const {
@@ -131,8 +68,6 @@ namespace rats
     }
   };
 
-  void outer_product_matrix(hrp::Matrix33 &ret, const hrp::Vector3 &v);
-  void matrix_exponent(hrp::Matrix33& mexp, const hrp::Vector3& omega, double p);
   void mid_coords(coordinates& mid_coords, const double p, const coordinates& c1, const coordinates& c2);
 };
 #endif /* RATSMATRIX_H */
