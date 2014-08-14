@@ -219,9 +219,7 @@ void RemoveForceSensorLinkOffset::updateRootLinkPosRot (const hrp::Vector3& rpy)
 {
   if ( m_robot->numSensors(hrp::Sensor::ACCELERATION) > 0) {
     hrp::Sensor *sensor = m_robot->sensor(hrp::Sensor::ACCELERATION, 0);
-    hrp::Matrix33 tmpr;
-    rats::rotm3times(tmpr, hrp::Matrix33(sensor->link->R*sensor->localR).transpose(), m_robot->rootLink()->R);
-    rats::rotm3times(m_robot->rootLink()->R, hrp::rotFromRpy(rpy(0), rpy(1), rpy(2)), tmpr);
+    m_robot->rootLink()->R = hrp::rotFromRpy(rpy(0), rpy(1), rpy(2)) * hrp::Matrix33(sensor->link->R*sensor->localR).transpose() * m_robot->rootLink()->R;
   }
 }
 

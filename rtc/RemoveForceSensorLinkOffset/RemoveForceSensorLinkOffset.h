@@ -23,7 +23,6 @@
 #include <hrpUtil/EigenTypes.h>
 
 #include "RemoveForceSensorLinkOffsetService_impl.h"
-#include "../ImpedanceController/RatsMatrix.h"
 
 // Service implementation headers
 // <rtc-template block="service_impl_h">
