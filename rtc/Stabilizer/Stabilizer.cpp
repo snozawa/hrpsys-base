@@ -35,7 +35,6 @@ static const char* stabilizer_spec[] =
   };
 // </rtc-template>
 
-#define MAX_TRANSITION_COUNT (2/dt)
 static double vlimit(double value, double llimit_value, double ulimit_value);
 static double switching_inpact_absorber(double force, double lower_th, double upper_th);
 
@@ -247,7 +246,6 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   transition_joint_q.resize(m_robot->numJoints());
   qorg.resize(m_robot->numJoints());
   qrefv.resize(m_robot->numJoints());
-  transition_count = 0;
   loop = 0;
   if (is_legged_robot) {
     zmp_origin_off = ee_map[m_robot->sensor<hrp::ForceSensor>(sensor_names[0])->link->name].localp(2);
@@ -258,6 +256,8 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
     contact_states.push_back(true);
     prev_contact_states.push_back(true);
   }
+
+  transition_interpolator = new interpolator(1, dt, interpolator::HOFFARBIB, 1);
 
   // for debug output
   m_originRefZmp.data.x = m_originRefZmp.data.y = m_originRefZmp.data.z = 0.0;
@@ -279,12 +279,11 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
 }
 
 
-/*
 RTC::ReturnCode_t Stabilizer::onFinalize()
 {
+  delete transition_interpolator;
   return RTC::RTC_OK;
 }
-*/
 
 /*
 RTC::ReturnCode_t Stabilizer::onStartup(RTC::UniqueId ec_id)
@@ -312,7 +311,8 @@ RTC::ReturnCode_t Stabilizer::onDeactivated(RTC::UniqueId ec_id)
   if ( (control_mode == MODE_ST || control_mode == MODE_AIR) ) {
     sync_2_idle ();
     control_mode = MODE_IDLE;
-    transition_count = 1; // sync in one controller loop
+    double tmp_ratio = 0.0;
+    transition_interpolator->go(&tmp_ratio, dt, true); // sync in one controller loop
   }
   return RTC::RTC_OK;
 }
@@ -362,28 +362,35 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
     getCurrentParameters();
     getTargetParameters();
     getActualParameters();
-    switch (control_mode) {
-    case MODE_IDLE:
-      break;
-    case MODE_AIR:
-      if ( transition_count == 0 && on_ground ) sync_2_st();
-      break;
-    case MODE_ST:
+    if (control_mode == MODE_AIR ) {
+      if ( transition_interpolator->isEmpty() && on_ground ) sync_2_st();
+    } else {
       if (st_algorithm == OpenHRP::StabilizerService::EEFM) {
         calcEEForceMomentControl();
       } else {
         calcTPCC();
       }
-      if ( transition_count == 0 && !on_ground ) control_mode = MODE_SYNC_TO_AIR;
-      break;
-    case MODE_SYNC_TO_IDLE:
-      sync_2_idle();
+      if ( transition_interpolator->isEmpty() == 0 && !on_ground ) control_mode = MODE_SYNC_TO_AIR;
+    }
+    // transition
+    if (!transition_interpolator->isEmpty()) {
+      double tmp_ratio;
+      transition_interpolator->get(&tmp_ratio, true);
+      // tmp_ratio 0=>1 : IDLE,AIR => ST
+      // tmp_ratio 1=>0 : ST => IDLE,AIR
+      for ( int i = 0; i < m_robot->numJoints(); i++ ) {
+        m_robot->joint(i)->q = (1-tmp_ratio) * m_qRef.data[i] + tmp_ratio * m_robot->joint(i)->q;
+      }
+    }
+    // mode change for sync
+    if (control_mode == MODE_SYNC_TO_ST) {
+      control_mode = MODE_ST;
+    } else if (control_mode == MODE_SYNC_TO_IDLE && transition_interpolator->isEmpty() ) {
+      std::cerr << "[" << m_profile.instance_name << "] Finished cleanup" << std::endl;
       control_mode = MODE_IDLE;
-      break;
-    case MODE_SYNC_TO_AIR:
-      sync_2_idle();
+    } else if (control_mode == MODE_SYNC_TO_AIR && transition_interpolator->isEmpty() ) {
+      std::cerr << "[" << m_profile.instance_name << "] Finished cleanup" << std::endl;
       control_mode = MODE_AIR;
-      break;
     }
   }
   if ( m_robot->numJoints() == m_qRef.data.length() ) {
@@ -547,8 +554,10 @@ void Stabilizer::getActualParameters ()
     hrp::Vector3 dcogvel=foot_origin_rot * (ref_cogvel - act_cogvel);
     hrp::Vector3 dzmp=foot_origin_rot * (ref_zmp - act_zmp);
     new_refzmp = foot_origin_rot * new_refzmp + foot_origin_pos;
+    double tmp_ratio;
+    transition_interpolator->get(&tmp_ratio, false);
     for (size_t i = 0; i < 2; i++) {
-      new_refzmp(i) += eefm_k1[i] * transition_smooth_gain * dcog(i) + eefm_k2[i] * transition_smooth_gain * dcogvel(i) + eefm_k3[i] * transition_smooth_gain * dzmp(i) + ref_zmp_aux(i);
+      new_refzmp(i) += eefm_k1[i] * tmp_ratio * dcog(i) + eefm_k2[i] * tmp_ratio * dcogvel(i) + eefm_k3[i] * tmp_ratio * dzmp(i) + ref_zmp_aux(i);
     }
     if (DEBUGP) {
       std::cerr << "[" << m_profile.instance_name << "] state values" << std::endl;
@@ -688,7 +697,7 @@ void Stabilizer::getActualParameters ()
       hrp::Vector3 act_root_rpy = hrp::rpyFromRot(m_robot->rootLink()->R);
       hrp::Vector3 ref_root_rpy = hrp::rpyFromRot(target_root_R);
       for (size_t i = 0; i < 2; i++) {
-        d_rpy[i] = transition_smooth_gain * (eefm_body_attitude_control_gain[i] * (ref_root_rpy(i) - act_root_rpy(i)) - 1/eefm_body_attitude_control_time_const[i] * d_rpy[i]) * dt + d_rpy[i];
+        d_rpy[i] = tmp_ratio * (eefm_body_attitude_control_gain[i] * (ref_root_rpy(i) - act_root_rpy(i)) - 1/eefm_body_attitude_control_time_const[i] * d_rpy[i]) * dt + d_rpy[i];
       }
     }
 
@@ -774,32 +783,31 @@ void Stabilizer::getActualParameters ()
     m_robot->calcForwardKinematics();
   }
   copy (contact_states.begin(), contact_states.end(), prev_contact_states.begin());
+  //
+  /* 
+   * if (control_mode == MODE_SYNC_TO_ST) {
+   *   current_root_p = target_root_p;
+   *   current_root_R = target_root_R;
+   *   /\* 
+   *    * for (size_t i = 0; i < 2; i++) {
+   *    *   hrp::Sensor* sen = m_robot->sensor<hrp::ForceSensor>(sensor_names[i]);
+   *    *   if ( sen != NULL) {
+   *    *     target_foot_p[i] = sen->link->p + sen->link->R * ee_map[sen->link->name].localp;
+   *    *     target_foot_R[i] = sen->link->R * ee_map[sen->link->name].localR;
+   *    *   }
+   *    * }
+   *    *\/
+   * }
+   */
 }
 
 void Stabilizer::getTargetParameters ()
 {
   // Reference world frame =>
   // update internal robot model
-  if ( transition_count == 0 ) {
-    transition_smooth_gain = 1.0;
-  } else {
-    transition_smooth_gain = 1/(1+exp(-9.19*(((MAX_TRANSITION_COUNT - std::fabs(transition_count)) / MAX_TRANSITION_COUNT) - 0.5)));
-  }
-  if (transition_count > 0) {
-    for ( int i = 0; i < m_robot->numJoints(); i++ ){
-      m_robot->joint(i)->q = ( m_qRef.data[i] - transition_joint_q[i] ) * transition_smooth_gain + transition_joint_q[i];
-    }
-  } else {
-    for ( int i = 0; i < m_robot->numJoints(); i++ ){
-      m_robot->joint(i)->q = m_qRef.data[i];
-    }
-  }
-  if ( transition_count < 0 ) {
-    transition_count++;
-  } else if ( transition_count > 0 ) {
-    transition_count--;
-  }
+  // joint angles
   for ( int i = 0; i < m_robot->numJoints(); i++ ){
+    m_robot->joint(i)->q = m_qRef.data[i];
     qrefv[i] = m_robot->joint(i)->q;
   }
   m_robot->rootLink()->p = hrp::Vector3(m_basePos.data.x, m_basePos.data.y, m_basePos.data.z);
@@ -887,10 +895,19 @@ void Stabilizer::calcTPCC() {
       hrp::Vector3 newcog = hrp::Vector3::Zero();
       hrp::Vector3 dcog(ref_cog - act_cog);
       hrp::Vector3 dzmp(ref_zmp - act_zmp);
+      double tmp_ratio;
+      transition_interpolator->get(&tmp_ratio, false);
+      //std::cerr << "tmp_ratio " << tmp_ratio << " " << control_mode << std::endl;
       for (size_t i = 0; i < 2; i++) {
-        double uu = ref_cogvel(i) - k_tpcc_p[i] * transition_smooth_gain * dzmp(i)
-                                  + k_tpcc_x[i] * transition_smooth_gain * dcog(i);
+        double uu = ref_cogvel(i) - k_tpcc_p[i] * tmp_ratio * dzmp(i)
+                                  + k_tpcc_x[i] * tmp_ratio * dcog(i);
         newcog(i) = uu * dt + cog(i);
+      }
+      if (loop%20==0) {
+        std::cerr << "rootp " << current_root_p(0) << " " << target_root_p(0) << " " << m_robot->rootLink()->p(0) << std::endl;
+        hrp::Link* target = m_robot->sensor<hrp::ForceSensor>(sensor_names[0])->link;
+        std::cerr << "tf " << target_foot_p[0](0) << " " << target->p(0) << std::endl;
+        std::cerr << "cog " << ref_cog(0) << " " << act_cog(0) << std::endl;
       }
 
       //rpy control
@@ -904,7 +921,7 @@ void Stabilizer::calcTPCC() {
           hrp::Vector3 act_rpy = hrp::rpyFromRot(act_Rb);
           hrp::Vector3 ref_rpy = hrp::rpyFromRot(target_root_R);
           for (size_t i = 0; i < 2; i++) {
-            d_rpy[i] = transition_smooth_gain * (k_brot_p[i] * (ref_rpy(i) - act_rpy(i)) - 1/k_brot_tc[i] * d_rpy[i]) * dt + d_rpy[i];
+            d_rpy[i] = tmp_ratio * (k_brot_p[i] * (ref_rpy(i) - act_rpy(i)) - 1/k_brot_tc[i] * d_rpy[i]) * dt + d_rpy[i];
           }
           rats::rotm3times(current_root_R, target_root_R, hrp::rotFromRpy(d_rpy[0], d_rpy[1], 0));
           m_robot->rootLink()->R = current_root_R;
@@ -923,8 +940,14 @@ void Stabilizer::calcTPCC() {
       //for (size_t jj = 0; jj < 5; jj++) {
       for (size_t jj = 0; jj < 3; jj++) {
         hrp::Vector3 tmpcm = m_robot->calcCM();
+        if (loop%20==0) {
+          std::cerr << "cog (" << jj << ") " << newcog(0) << " " << tmpcm(0) << " " << m_robot->rootLink()->p(0) << std::endl;
+        }
         for (size_t i = 0; i < 2; i++) {
           m_robot->rootLink()->p(i) = m_robot->rootLink()->p(i) + 0.9 * (newcog(i) - tmpcm(i));
+        }
+        if (loop%20==0) {
+          std::cerr << "cog (" << jj << ") " << newcog(0) << " " << tmpcm(0) << " " << m_robot->rootLink()->p(0) << std::endl;
         }
         m_robot->calcForwardKinematics();
         for (size_t i = 0; i < 2; i++) {
@@ -988,6 +1011,8 @@ void Stabilizer::calcEEForceMomentControl() {
         total_target_foot_p[i] -= total_target_foot_R[i] * ee_map[target->name].localp;
       }
       // solveIK
+      double tmp_ratio;
+      transition_interpolator->get(&tmp_ratio, false);
       for (size_t jj = 0; jj < 3; jj++) {
         m_robot->calcForwardKinematics();
         for (size_t i = 0; i < 2; i++) {
@@ -995,8 +1020,8 @@ void Stabilizer::calcEEForceMomentControl() {
           hrp::Vector3 vel_p, vel_r;
           vel_p = total_target_foot_p[i] - target->p;
           rats::difference_rotation(vel_r, target->R, total_target_foot_R[i]);
-          vel_p *= transition_smooth_gain;
-          vel_r *= transition_smooth_gain;
+          vel_p *= tmp_ratio;
+          vel_r *= tmp_ratio;
           manip2[i]->calcInverseKinematics2Loop(vel_p, vel_r, 1.0, 0.001, 0.01, &qrefv);
         }
       }
@@ -1055,26 +1080,27 @@ void Stabilizer::sync_2_st ()
   zctrl = f_zctrl[0] = f_zctrl[1] = 0.0;
   d_foot_rpy[0] = d_foot_rpy[1] = hrp::Vector3::Zero();
   if (on_ground) {
-    transition_count = -MAX_TRANSITION_COUNT;
-    control_mode = MODE_ST;
+    control_mode = MODE_SYNC_TO_ST;
   } else {
-    transition_count = 0;
     control_mode = MODE_AIR;
   }
+  double tmp_ratio = 1.0;
+  transition_interpolator->go(&tmp_ratio, 2.0, true); // 2.0 [s] transition
 }
 
 void Stabilizer::sync_2_idle ()
 {
   std::cerr << "[" << m_profile.instance_name << "] " << "Sync ST => IDLE"  << std::endl;
-  transition_count = MAX_TRANSITION_COUNT;
   for (int i = 0; i < m_robot->numJoints(); i++ ) {
     transition_joint_q[i] = m_robot->joint(i)->q;
   }
+  double tmp_ratio = 0.0;
+  transition_interpolator->go(&tmp_ratio, 2.0, true); // 2.0 [s] transition
 }
 
 void Stabilizer::startStabilizer(void)
 {
-  if ( transition_count == 0 && control_mode == MODE_IDLE ) {
+  if ( transition_interpolator->isEmpty() && control_mode == MODE_IDLE ) {
     std::cerr << "[" << m_profile.instance_name << "] " << "Start ST"  << std::endl;
     sync_2_st();
     waitSTTransition();
@@ -1084,7 +1110,7 @@ void Stabilizer::startStabilizer(void)
 
 void Stabilizer::stopStabilizer(void)
 {
-  if ( transition_count == 0 && (control_mode == MODE_ST || control_mode == MODE_AIR) ) {
+  if ( transition_interpolator->isEmpty() && (control_mode == MODE_ST || control_mode == MODE_AIR) ) {
     std::cerr << "[" << m_profile.instance_name << "] " << "Stop ST"  << std::endl;
     control_mode = MODE_SYNC_TO_IDLE;
     waitSTTransition();
@@ -1215,7 +1241,7 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
 
 void Stabilizer::waitSTTransition()
 {
-  while (transition_count != 0) usleep(10);
+  while (!transition_interpolator->isEmpty()) usleep(10);
   usleep(10);
 }
 
@@ -1415,8 +1441,8 @@ void Stabilizer::calcRUNST() {
       }
       // m_robot->joint(m_robot->link("L_ANKLE_P")->jointId)->q = transition_smooth_gain * dleg_y[0] + orgjq + m_rpy.data.p;
       // m_robot->joint(m_robot->link("R_ANKLE_P")->jointId)->q = transition_smooth_gain * dleg_y[1] + orgjq + m_rpy.data.p;
-      m_robot->joint(m_robot->link("L_ANKLE_P")->jointId)->q = transition_smooth_gain * dleg_y[0] + orgjq;
-      m_robot->joint(m_robot->link("R_ANKLE_P")->jointId)->q = transition_smooth_gain * dleg_y[1] + orgjq;
+      m_robot->joint(m_robot->link("L_ANKLE_P")->jointId)->q = dleg_y[0] + orgjq;
+      m_robot->joint(m_robot->link("R_ANKLE_P")->jointId)->q = dleg_y[1] + orgjq;
     } else {
       // reinitialize
       for (int i = 0; i < ST_NUM_LEGS; i++) {

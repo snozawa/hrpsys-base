@@ -25,6 +25,7 @@
 #include "TwoDofController.h"
 #include "../ImpedanceController/JointPathEx.h"
 #include "../ImpedanceController/RatsMatrix.h"
+#include "interpolator.h"
 
 // </rtc-template>
 
@@ -58,7 +59,7 @@ class Stabilizer
 
   // The finalize action (on ALIVE->END transition)
   // formaer rtc_exiting_entry()
-  // virtual RTC::ReturnCode_t onFinalize();
+  virtual RTC::ReturnCode_t onFinalize();
 
   // The startup action when ExecutionContext startup
   // former rtc_starting_entry()
@@ -229,10 +230,11 @@ class Stabilizer
     hrp::Vector3 localp;
     hrp::Matrix33 localR;
   };
-  enum cmode {MODE_IDLE, MODE_AIR, MODE_ST, MODE_SYNC_TO_IDLE, MODE_SYNC_TO_AIR} control_mode;
+  enum cmode {MODE_IDLE, MODE_AIR, MODE_ST, MODE_SYNC_TO_IDLE, MODE_SYNC_TO_AIR, MODE_SYNC_TO_ST} control_mode;
   // members
   hrp::JointPathExPtr manip2[2];
   hrp::BodyPtr m_robot;
+  interpolator *transition_interpolator;
   unsigned int m_debugLevel;
   hrp::dvector transition_joint_q, qorg, qrefv;
   std::vector<std::string> sensor_names;
@@ -240,14 +242,14 @@ class Stabilizer
   std::map<std::string, size_t> contact_states_index_map;
   std::vector<bool> contact_states, prev_contact_states;
   double dt;
-  int transition_count, loop;
+  int loop;
   bool is_legged_robot, on_ground;
   hrp::Vector3 current_root_p, target_foot_p[2], target_root_p;
   hrp::Matrix33 current_root_R, target_root_R, target_foot_R[2], prev_act_foot_origin_rot, prev_ref_foot_origin_rot;
   rats::coordinates target_foot_midcoords;
   hrp::Vector3 ref_zmp, ref_cog, ref_cogvel, prev_ref_cog, prev_ref_zmp;
   hrp::Vector3 act_zmp, act_cog, act_cogvel, rel_act_zmp, prev_act_cog, prev_act_cogvel, act_base_rpy, current_base_rpy, current_base_pos;
-  double zmp_origin_off, transition_smooth_gain, prev_act_force_z[2];
+  double zmp_origin_off, prev_act_force_z[2];
   OpenHRP::StabilizerService::STAlgorithm st_algorithm;
   // TPCC
   double k_tpcc_p[2], k_tpcc_x[2], d_rpy[2], k_brot_p[2], k_brot_tc[2];
