@@ -28,7 +28,9 @@
 (defforeign _calcInverseKinematics2Loop
   *libjointpathexc*
   "_calcInverseKinematics2Loop"
-  (:string :string) ;; vel_p, vel_r
+  (:string :string ;; vel_p, vel_r
+   :integer :integer ;; translation_axis, rotation_axis
+   )
   :integer)
 
 #|
@@ -42,7 +44,7 @@
   (_getJointAngles av)
   (send *robot* :angle-vector (map float-vector #'rad2deg av))
   (do-until-key
-   (_calcInverseKinematics2Loop #f(0 0 0.001) #F(0 0 0))
+   (_calcInverseKinematics2Loop #f(0 0 0.001) #F(0 0 0) 0 0)
    (_getJointAngles av)
    (send *robot* :angle-vector (map float-vector #'rad2deg av))
    (send *irtviewer* :draw-objects))

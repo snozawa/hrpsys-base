@@ -79,7 +79,8 @@ extern "C" {
         }
     }
 
-    int _calcInverseKinematics2Loop (double* _vel_p, double* _vel_r)
+    int _calcInverseKinematics2Loop (double* _vel_p, double* _vel_r,
+                                     hrp::ik_workspace_constraint translation_axis, hrp::ik_workspace_constraint rotation_axis) // See JointPathEx.h
     {
         hrp::dvector qrefv = hrp::dvector::Zero(jpe->numJoints());
         hrp::Vector3 vel_p, vel_r;
@@ -87,7 +88,7 @@ extern "C" {
             vel_p[i] = _vel_p[i];
             vel_r[i] = _vel_r[i];
         }
-        jpe->calcInverseKinematics2Loop(vel_p, vel_r, 1.0, 0.002, 0.0, &qrefv);
+        jpe->calcInverseKinematics2Loop(vel_p, vel_r, 1.0, 0.002, 0.0, &qrefv, translation_axis, rotation_axis);
         return 0;
     }
 };

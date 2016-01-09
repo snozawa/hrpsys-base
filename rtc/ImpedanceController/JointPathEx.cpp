@@ -31,8 +31,8 @@ std::ostream& operator<<(std::ostream& out, hrp::dvector &a) {
     out << std::endl;
 }
 
-//#define DEBUG true
-#define DEBUG false
+#define DEBUG true
+//#define DEBUG false
 
 
 using namespace std;
@@ -84,7 +84,60 @@ Vector3 omegaFromRotEx(const Matrix33& r)
                         (r(2,0) - r(0,2)) * k,
                         (r(0,1) - r(1,0)) * k );
     }
-}
+};
+
+size_t hrp::calcWorkspaceConstraintDimensions (const ik_workspace_constraint constraint)
+{
+    if (constraint == ALL) {
+        return 3;
+    } else if (constraint == NONE) {
+        return 0;
+    } else if (constraint == X || constraint == Y || constraint == Z) {
+        return 2;
+    } else if (constraint == XY || constraint == YZ || constraint == ZX) {
+        return 1;
+    }
+};
+
+void hrp::setVectorWithWorkspaceConstraint (hrp::dvector& output_v, const hrp::Vector3& input_v, const ik_workspace_constraint constraint,
+                                            const size_t offset)
+{
+    switch (constraint) {
+    case ALL:
+        for (size_t i = 0; i < 3; i++) output_v(i+offset) = input_v(i);
+        break;
+    case X:
+        output_v(1+offset) = input_v(1); output_v(2+offset) = input_v(2);
+        break;
+    case Y:
+        output_v(0+offset) = input_v(0); output_v(2+offset) = input_v(2);
+        break;
+    case Z:
+        output_v(0+offset) = input_v(0); output_v(1+offset) = input_v(1);
+        break;
+    case XY:
+        output_v(2+offset) = input_v(2);
+        break;
+    case YZ:
+        output_v(0+offset) = input_v(0);
+        break;
+    case ZX:
+        output_v(1+offset) = input_v(1);
+        break;
+    case NONE:
+        break;
+    default:
+        break;
+    }
+};
+
+void hrp::setPosRotVectorWithWorkspaceConstraints (hrp::dvector& output_v,
+                                                   const hrp::Vector3& dp, const hrp::Vector3& dr,
+                                                   const ik_workspace_constraint translation_axis, const ik_workspace_constraint rotation_axis)
+{
+    setVectorWithWorkspaceConstraint(output_v, dp, translation_axis);
+    setVectorWithWorkspaceConstraint(output_v, dr, rotation_axis, calcWorkspaceConstraintDimensions(translation_axis));
+};
 
 JointPathEx::JointPathEx(BodyPtr& robot, Link* base, Link* end, double control_cycle, bool _use_inside_joint_weight_retrieval, const std::string& _debug_print_prefix)
     : JointPath(base, end), sr_gain(1.0), manipulability_limit(0.1), manipulability_gain(0.001), maxIKPosErrorSqr(1.0e-8), maxIKRotErrorSqr(1.0e-6), maxIKIteration(50), interlocking_joint_pair_indices(), dt(control_cycle),
@@ -232,7 +285,8 @@ bool JointPathEx::calcJacobianInverseNullspace(dmatrix &J, dmatrix &Jinv, dmatri
 }
 
 bool JointPathEx::calcInverseKinematics2Loop(const Vector3& dp, const Vector3& omega,
-                                             const double LAMBDA, const double avoid_gain, const double reference_gain, const hrp::dvector* reference_q) {
+                                             const double LAMBDA, const double avoid_gain, const double reference_gain, const hrp::dvector* reference_q,
+                                             const ik_workspace_constraint translation_axis, const ik_workspace_constraint rotation_axis) {
     const int n = numJoints();
 
     if ( DEBUG ) {
@@ -243,19 +297,20 @@ bool JointPathEx::calcInverseKinematics2Loop(const Vector3& dp, const Vector3& o
         std::cerr << endl;
     }
 
-    size_t ee_workspace_dim = 6; // End-effector workspace dimensions including pos(3) and rot(3)
+    size_t ee_workspace_dim = calcWorkspaceConstraintDimensions(translation_axis)+calcWorkspaceConstraintDimensions(rotation_axis); // End-effector workspace dimensions including pos and rot, 3+3=6 by default
     size_t ij_workspace_dim = interlocking_joint_pair_indices.size(); // Dimensions for interlocking joints constraint. 0 by default.
     size_t workspace_dim = ee_workspace_dim + ij_workspace_dim;
+    std::cerr << "tr " << translation_axis << " " << rotation_axis << " " << workspace_dim << " " << ee_workspace_dim << std::endl;
 
     // Total jacobian, workspace velocty, and so on
     hrp::dmatrix J(workspace_dim, n);
-    dvector v(workspace_dim);
+    dvector v = hrp::dvector::Zero(workspace_dim);
     hrp::dmatrix Jinv(n, workspace_dim);
     hrp::dmatrix Jnull(n, n);
     hrp::dvector dq(n);
 
     if (ij_workspace_dim > 0) {
-        v << dp, omega, dvector::Zero(ij_workspace_dim);
+        setPosRotVectorWithWorkspaceConstraints(v, dp, omega, translation_axis, rotation_axis);
         hrp::dmatrix ee_J = dmatrix::Zero(ee_workspace_dim, n);
         calcJacobian(ee_J);
         hrp::dmatrix ij_J = dmatrix::Zero(ij_workspace_dim, n);
@@ -266,8 +321,9 @@ bool JointPathEx::calcInverseKinematics2Loop(const Vector3& dp, const Vector3& o
         }
         J << ee_J, ij_J;
     } else {
-        v << dp, omega;
-        calcJacobian(J);
+        setPosRotVectorWithWorkspaceConstraints(v, dp, omega, translation_axis, rotation_axis);
+        hrp::dmatrix tmpJ(6, n);
+        calcJacobian(tmpJ);
     }
     calcJacobianInverseNullspace(J, Jinv, Jnull);
     dq = Jinv * v; // dq = pseudoInverse(J) * v

@@ -13,11 +13,20 @@ namespace hrp {
 
 // hrplib/hrpModel/JointPath.h
 namespace hrp {
+    enum ik_workspace_constraint {ALL, NONE, X, Y, Z, XY, YZ, ZX};
+    size_t calcWorkspaceConstraintDimensions (const ik_workspace_constraint constraint);
+    void setVectorWithWorkspaceConstraint (hrp::dvector& output_v, const hrp::Vector3& input_v, const ik_workspace_constraint constraint,
+                                           const size_t offset = 0);
+    void setPosRotVectorWithWorkspaceConstraints (hrp::dvector& output_v,
+                                                  const hrp::Vector3& dp, const hrp::Vector3& dr,
+                                                  const ik_workspace_constraint translation_axis, const ik_workspace_constraint rotation_axis);
+
     class JointPathEx : public JointPath {
   public:
     JointPathEx(BodyPtr& robot, Link* base, Link* end, double control_cycle, bool _use_inside_joint_weight_retrieval = true, const std::string& _debug_print_prefix = "");
     bool calcJacobianInverseNullspace(dmatrix &J, dmatrix &Jinv, dmatrix &Jnull);
-    bool calcInverseKinematics2Loop(const Vector3& dp, const Vector3& omega, const double LAMBDA, const double avoid_gain = 0.0, const double reference_gain = 0.0, const dvector* reference_q = NULL);
+    bool calcInverseKinematics2Loop(const Vector3& dp, const Vector3& omega, const double LAMBDA, const double avoid_gain = 0.0, const double reference_gain = 0.0, const dvector* reference_q = NULL,
+                                    const ik_workspace_constraint translation_axis = ALL, const ik_workspace_constraint rotation_axis = ALL);
     bool calcInverseKinematics2(const Vector3& end_p, const Matrix33& end_R, const double avoid_gain = 0.0, const double reference_gain = 0.0, const dvector* reference_q = NULL);
     double getSRGain() { return sr_gain; }
     bool setSRGain(double g) { sr_gain = g; }
