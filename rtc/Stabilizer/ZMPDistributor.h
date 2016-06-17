@@ -713,6 +713,7 @@ public:
                                                    const std::vector<std::string>& ee_name,
                                                    const std::vector<double>& limb_gains,
                                                    const hrp::Vector3& new_refzmp, const hrp::Vector3& ref_zmp,
+                                                   const hrp::Vector3& total_force, const hrp::Vector3& total_moment,
                                                    const double total_fz, const double dt, const bool printp = true, const std::string& print_str = "",
                                                    const bool use_cop_distribution = true)
     {

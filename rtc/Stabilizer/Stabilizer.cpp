@@ -868,6 +868,7 @@ void Stabilizer::getActualParameters ()
           szd->distributeZMPToForceMomentsPseudoInverse(ref_force, ref_moment,
                                              ee_pos, cop_pos, ee_rot, ee_name, limb_gains,
                                              new_refzmp, hrp::Vector3(foot_origin_rot * ref_zmp + foot_origin_pos),
+                                             ref_total_force, ref_total_moment,
                                              eefm_gravitational_acceleration * total_mass, dt,
                                              DEBUGP, std::string(m_profile.instance_name),
                                              (st_algorithm == OpenHRP::StabilizerService::EEFMQPCOP));
@@ -1052,11 +1053,16 @@ void Stabilizer::getTargetParameters ()
     ref_zmp = tmp_ref_zmp;
   }
   ref_cog = m_robot->calcCM();
+  ref_total_force = hrp::Vector3::Zero();
+  ref_total_moment = hrp::Vector3::Zero();
   for (size_t i = 0; i < stikp.size(); i++) {
     hrp::Link* target = m_robot->link(stikp[i].target_name);
     //target_ee_p[i] = target->p + target->R * stikp[i].localCOPPos;
     target_ee_p[i] = target->p + target->R * stikp[i].localp;
     target_ee_R[i] = target->R * stikp[i].localR;
+    ref_total_force += hrp::Vector3(m_ref_wrenches[i].data[0], m_ref_wrenches[i].data[1], m_ref_wrenches[i].data[2]);
+    ref_total_moment += target_ee_p[i].cross(hrp::Vector3(m_ref_wrenches[i].data[0], m_ref_wrenches[i].data[1], m_ref_wrenches[i].data[2]))
+        + hrp::Vector3(m_ref_wrenches[i].data[3], m_ref_wrenches[i].data[4], m_ref_wrenches[i].data[5]);
   }
   // <= Reference world frame
 
