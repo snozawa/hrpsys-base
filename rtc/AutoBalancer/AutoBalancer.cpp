@@ -568,6 +568,7 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
 
     for (unsigned int i=0; i<m_ref_forceOut.size(); i++){
         m_force[i].tm = m_qRef.tm;
+        for (unsigned int j=0; j<6; j++) m_force[i].data[j] = m_ref_force[i].data[j];
         m_ref_forceOut[i]->write();
     }
 
