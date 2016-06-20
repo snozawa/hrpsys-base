@@ -738,20 +738,25 @@ public:
                           << "ref_moment [" << ee_name[i] << "] " << hrp::Vector3(ref_foot_moment[i]).format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "[", "]")) << "[Nm]" << std::endl;
             }
         }
+#define FORCE_MOMENT_DIFF_CONTROL
 
         hrp::dvector total_wrench = hrp::dvector::Zero(total_wrench_dim);
-        // total_wrench(0) = total_force(0);
-        // total_wrench(1) = total_force(1);
-        // total_wrench(2) = total_force(2);
+#ifndef FORCE_MOMENT_DIFF_CONTROL
+        total_wrench(0) = total_force(0);
+        total_wrench(1) = total_force(1);
+        total_wrench(2) = total_force(2);
+#endif
         total_wrench(3) = total_moment(0);
         total_wrench(4) = total_moment(1);
         total_wrench(5) = total_moment(2);
+#ifdef FORCE_MOMENT_DIFF_CONTROL
         for (size_t fidx = 0; fidx < ee_num; fidx++) {
             double tmp_tau_x = -(cop_pos[fidx](2)-new_refzmp(2)) * ref_foot_force[fidx](1) + (cop_pos[fidx](1)-new_refzmp(1)) * ref_foot_force[fidx](2);
             total_wrench(3) -= tmp_tau_x;
             double tmp_tau_y = (cop_pos[fidx](2)-new_refzmp(2)) * ref_foot_force[fidx](0) - (cop_pos[fidx](0)-new_refzmp(0)) * ref_foot_force[fidx](2);
             total_wrench(4) -= tmp_tau_y;
         }
+#endif
 
         hrp::dmatrix Wmat = hrp::dmatrix::Zero(state_dim, state_dim);
         hrp::dmatrix Gmat = hrp::dmatrix::Zero(total_wrench_dim, state_dim);
@@ -827,8 +832,13 @@ public:
             }
         }
         for (size_t fidx = 0; fidx < ee_num; fidx++) {
+#ifdef FORCE_MOMENT_DIFF_CONTROL
             ref_foot_force[fidx] += hrp::Vector3(ret(6*fidx), ret(6*fidx+1), ret(6*fidx+2));
             ref_foot_moment[fidx] += hrp::Vector3(ret(6*fidx+3), ret(6*fidx+4), ret(6*fidx+5));
+#else
+            ref_foot_force[fidx] = hrp::Vector3(ret(6*fidx), ret(6*fidx+1), ret(6*fidx+2));
+            ref_foot_moment[fidx] = hrp::Vector3(ret(6*fidx+3), ret(6*fidx+4), ret(6*fidx+5));
+#endif
         }
         if (printp){
             for (size_t i = 0; i < ee_num; i++) {

@@ -1068,7 +1068,11 @@ void Stabilizer::getTargetParameters ()
     target_ee_p[i] = target->p + target->R * stikp[i].localp;
     target_ee_R[i] = target->R * stikp[i].localR;
     ref_total_force += hrp::Vector3(m_ref_wrenches[i].data[0], m_ref_wrenches[i].data[1], m_ref_wrenches[i].data[2]);
+    // Force/moment diff control
     ref_total_moment += (target_ee_p[i]-ref_zmp).cross(hrp::Vector3(m_ref_wrenches[i].data[0], m_ref_wrenches[i].data[1], m_ref_wrenches[i].data[2]));
+    // Force/moment control
+    // ref_total_moment += (target_ee_p[i]-ref_zmp).cross(hrp::Vector3(m_ref_wrenches[i].data[0], m_ref_wrenches[i].data[1], m_ref_wrenches[i].data[2]))
+    //     + hrp::Vector3(m_ref_wrenches[i].data[3], m_ref_wrenches[i].data[4], m_ref_wrenches[i].data[5]);
   }
   // <= Reference world frame
 
