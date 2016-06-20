@@ -727,8 +727,7 @@ public:
         // ref_foot_force and ref_foot_moment should be set
         double norm_weight = 1e-7;
         double norm_moment_weight = 1e2;
-        //size_t total_wrench_dim = 5;
-        size_t total_wrench_dim = 3;
+        size_t total_wrench_dim = 6;
         size_t state_dim = 6*ee_num;
         if (false) { // Temp
             size_t total_wrench_dim = 5;
@@ -796,34 +795,30 @@ public:
 
         hrp::dvector total_wrench = hrp::dvector::Zero(total_wrench_dim);
         hrp::Vector3 ref_total_force = hrp::Vector3::Zero();
+        total_wrench(0) = total_force(0);
+        total_wrench(1) = total_force(1);
+        total_wrench(2) = total_force(2);
+        total_wrench(3) = total_moment(0);
+        total_wrench(4) = total_moment(1);
+        total_wrench(5) = total_moment(2);
         for (size_t fidx = 0; fidx < ee_num; fidx++) {
-            double tmp_tau_x = -(cop_pos[fidx](2)-ref_zmp(2)) * ref_foot_force[fidx](1)
-                + (cop_pos[fidx](1)-ref_zmp(1)) * ref_foot_force[fidx](2)
-                + ref_foot_moment[fidx](0);
-            total_wrench(total_wrench_dim-2) -= tmp_tau_x;
-            double tmp_tau_y = (cop_pos[fidx](2)-ref_zmp(2)) * ref_foot_force[fidx](0)
-                - (cop_pos[fidx](0)-ref_zmp(0)) * ref_foot_force[fidx](2)
-                + ref_foot_moment[fidx](1);
-            total_wrench(total_wrench_dim-1) -= tmp_tau_y;
-            ref_total_force += ref_foot_force[fidx];
+            double tmp_tau_x = -(cop_pos[fidx](2)-ref_zmp(2)) * ref_foot_force[fidx](1) + (cop_pos[fidx](1)-ref_zmp(1)) * ref_foot_force[fidx](2);
+            total_wrench(3) -= tmp_tau_x;
+            double tmp_tau_y = (cop_pos[fidx](2)-ref_zmp(2)) * ref_foot_force[fidx](0) - (cop_pos[fidx](0)-ref_zmp(0)) * ref_foot_force[fidx](2);
+            total_wrench(4) -= tmp_tau_y;
         }
-        total_wrench(total_wrench_dim-2) -= -(ref_zmp(2) - new_refzmp(2)) * ref_total_force(1) + (ref_zmp(1) - new_refzmp(1)) * ref_total_force(2);
-        total_wrench(total_wrench_dim-1) -= (ref_zmp(2) - new_refzmp(2)) * ref_total_force(0) - (ref_zmp(0) - new_refzmp(0)) * ref_total_force(2);
 
         hrp::dmatrix Wmat = hrp::dmatrix::Zero(state_dim, state_dim);
         hrp::dmatrix Gmat = hrp::dmatrix::Zero(total_wrench_dim, state_dim);
         for (size_t j = 0; j < ee_num; j++) {
-            // total_wrench_dim = 5
-            //for (size_t k = 0; k < total_wrench_dim; k++) Gmat(k,6*j+k) = 1.0;
-            // total_wrench_dim = 3
-            for (size_t k = 0; k < total_wrench_dim; k++) Gmat(k,6*j+k+2) = 1.0;
+            for (size_t k = 0; k < total_wrench_dim; k++) Gmat(k,6*j+k) = 1.0;
         }
         for (size_t i = 0; i < total_wrench_dim; i++) {
             for (size_t j = 0; j < ee_num; j++) {
-                if ( i == total_wrench_dim-2 ) { // Nx
+                if ( i == total_wrench_dim-3 ) { // Nx
                     Gmat(i,6*j+1) = -(cop_pos[j](2) - new_refzmp(2));
                     Gmat(i,6*j+2) = (cop_pos[j](1) - new_refzmp(1));
-                } else if ( i == total_wrench_dim-1) { // Ny
+                } else if ( i == total_wrench_dim-2) { // Ny
                     Gmat(i,6*j) = (cop_pos[j](2) - new_refzmp(2));
                     Gmat(i,6*j+2) = -(cop_pos[j](0) - new_refzmp(0));
                 }
@@ -837,12 +832,20 @@ public:
         // }
         for (size_t j = 0; j < ee_num; j++) {
             for (size_t i = 0; i < 3; i++) {
-                // Wmat(i+j*6, i+j*6) = 1.0* limb_gains[j];
-                // Wmat(i+j*6+3, i+j*6+3) = (1.0/norm_moment_weight) * 1.0 * limb_gains[j];
-                Wmat(i+j*6, i+j*6) = (j > 1?0.1:1.0) * (i == 2 ? 1.0 : 0.0) * fz_alpha_vector[j] * 1.0 * limb_gains[j];
-                Wmat(i+j*6+3, i+j*6+3) = (j > 1?0.0:1.0) * fz_alpha_vector[j] * (1.0/norm_moment_weight) * 1.0 * limb_gains[j];
+                // Wmat(i+j*6, i+j*6) = (i==2?1.0:0.0) * fz_alpha_vector[j] * limb_gains[j];
+                // Wmat(i+j*6+3, i+j*6+3) = (j>1?0.0:1.0) * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
+                Wmat(i+j*6, i+j*6) = (j>1?0.1:1.0) * (i==2?1.0:0.0) * fz_alpha_vector[j] * limb_gains[j];
+                Wmat(i+j*6+3, i+j*6+3) = (j>1?0.0:1.0) * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
             }
         }
+        // for (size_t j = 0; j < ee_num; j++) {
+        //     for (size_t i = 0; i < 3; i++) {
+        //         // Wmat(i+j*6, i+j*6) = 1.0* limb_gains[j];
+        //         // Wmat(i+j*6+3, i+j*6+3) = (1.0/norm_moment_weight) * 1.0 * limb_gains[j];
+        //         // Wmat(i+j*6, i+j*6) = (j > 1?0.1:1.0) * (i == 2 ? 1.0 : 0.0) * fz_alpha_vector[j] * 1.0 * limb_gains[j];
+        //         // Wmat(i+j*6+3, i+j*6+3) = (j > 1?0.0:1.0) * fz_alpha_vector[j] * (1.0/norm_moment_weight) * 1.0 * limb_gains[j];
+        //     }
+        // }
         if (printp) {
             std::cerr << "[" << print_str << "]   newWmat(diag) = [";
             for (size_t j = 0; j < ee_num; j++) {
@@ -865,10 +868,6 @@ public:
         hrp::dvector ret(state_dim);
         calcWeightedLinearEquation(ret, Gmat, Wmat, total_wrench);
 
-        for (size_t fidx = 0; fidx < ee_num; fidx++) {
-            ref_foot_force[fidx] += hrp::Vector3(ret(6*fidx), ret(6*fidx+1), ret(6*fidx+2));
-            ref_foot_moment[fidx] += hrp::Vector3(ret(6*fidx+3), ret(6*fidx+4), ret(6*fidx+5));
-        }
         if (printp) {
             hrp::dvector tmpretv(total_wrench.size());
             tmpretv = Gmat * ret - total_wrench;
@@ -878,10 +877,16 @@ public:
                       << "total_wrench " << total_wrench.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "[", "]")) << "[N][Nm]" << std::endl;
             for (size_t i = 0; i < ee_num; i++) {
                 std::cerr << "[" << print_str << "]   "
-                          << "dif_ref_force  [" << ee_name[i] << "] " << hrp::Vector3(ret(6*i), ret(6*i+1), ret(6*i+2)).format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "[", "]")) << "[N]" << std::endl;
+                          << "dif_ref_force  [" << ee_name[i] << "] " << hrp::Vector3(hrp::Vector3(ret(6*i), ret(6*i+1), ret(6*i+2))-ref_foot_force[i]).format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "[", "]")) << "[N]" << std::endl;
                 std::cerr << "[" << print_str << "]   "
-                          << "dif_ref_moment [" << ee_name[i] << "] " << hrp::Vector3(ret(6*i+3), ret(6*i+4), ret(6*i+5)).format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "[", "]")) << "[Nm]" << std::endl;
+                          << "dif_ref_moment [" << ee_name[i] << "] " << hrp::Vector3(hrp::Vector3(ret(6*i+3), ret(6*i+4), ret(6*i+5))-ref_foot_moment[i]).format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "[", "]")) << "[Nm]" << std::endl;
             }
+        }
+        for (size_t fidx = 0; fidx < ee_num; fidx++) {
+            ref_foot_force[fidx] = hrp::Vector3(ret(6*fidx), ret(6*fidx+1), ret(6*fidx+2));
+            ref_foot_moment[fidx] = hrp::Vector3(ret(6*fidx+3), ret(6*fidx+4), ret(6*fidx+5));
+        }
+        if (printp){
             for (size_t i = 0; i < ee_num; i++) {
                 std::cerr << "[" << print_str << "]   "
                           << "new_ref_force  [" << ee_name[i] << "] " << hrp::Vector3(ref_foot_force[i]).format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "[", "]")) << "[N]" << std::endl;

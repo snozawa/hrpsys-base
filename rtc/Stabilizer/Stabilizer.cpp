@@ -1054,15 +1054,14 @@ void Stabilizer::getTargetParameters ()
   }
   ref_cog = m_robot->calcCM();
   ref_total_force = hrp::Vector3::Zero();
-  ref_total_moment = hrp::Vector3::Zero();
+  ref_total_moment = hrp::Vector3::Zero(); // Total moment around reference ZMP tmp
   for (size_t i = 0; i < stikp.size(); i++) {
     hrp::Link* target = m_robot->link(stikp[i].target_name);
     //target_ee_p[i] = target->p + target->R * stikp[i].localCOPPos;
     target_ee_p[i] = target->p + target->R * stikp[i].localp;
     target_ee_R[i] = target->R * stikp[i].localR;
     ref_total_force += hrp::Vector3(m_ref_wrenches[i].data[0], m_ref_wrenches[i].data[1], m_ref_wrenches[i].data[2]);
-    ref_total_moment += target_ee_p[i].cross(hrp::Vector3(m_ref_wrenches[i].data[0], m_ref_wrenches[i].data[1], m_ref_wrenches[i].data[2]))
-        + hrp::Vector3(m_ref_wrenches[i].data[3], m_ref_wrenches[i].data[4], m_ref_wrenches[i].data[5]);
+    ref_total_moment += (target_ee_p[i]-ref_zmp).cross(hrp::Vector3(m_ref_wrenches[i].data[0], m_ref_wrenches[i].data[1], m_ref_wrenches[i].data[2]));
   }
   // <= Reference world frame
 
