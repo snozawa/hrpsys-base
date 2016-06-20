@@ -714,6 +714,7 @@ public:
                                                    const std::vector<double>& limb_gains,
                                                    const hrp::Vector3& new_refzmp, const hrp::Vector3& ref_zmp,
                                                    const hrp::Vector3& total_force, const hrp::Vector3& total_moment,
+                                                   const std::vector<hrp::dvector6>& ee_forcemoment_distribution_weight,
                                                    const double total_fz, const double dt, const bool printp = true, const std::string& print_str = "",
                                                    const bool use_cop_distribution = true)
     {
@@ -833,8 +834,10 @@ public:
             for (size_t i = 0; i < 3; i++) {
                 // Wmat(i+j*6, i+j*6) = (i==2?1.0:0.0) * fz_alpha_vector[j] * limb_gains[j];
                 // Wmat(i+j*6+3, i+j*6+3) = (j>1?0.0:1.0) * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
-                Wmat(i+j*6, i+j*6) = (j>1?0.1:1.0) * (i==2?1.0:0.0) * fz_alpha_vector[j] * limb_gains[j];
-                Wmat(i+j*6+3, i+j*6+3) = (j>1?0.0:1.0) * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
+                // Wmat(i+j*6, i+j*6) = (j>1?0.1:1.0) * (i==2?1.0:0.0) * fz_alpha_vector[j] * limb_gains[j];
+                // Wmat(i+j*6+3, i+j*6+3) = (j>1?0.0:1.0) * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
+                Wmat(i+j*6, i+j*6) = ee_forcemoment_distribution_weight[j][i] * fz_alpha_vector[j] * limb_gains[j];
+                Wmat(i+j*6+3, i+j*6+3) = ee_forcemoment_distribution_weight[j][i+3] * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
             }
         }
         // for (size_t j = 0; j < ee_num; j++) {
