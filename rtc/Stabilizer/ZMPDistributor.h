@@ -794,7 +794,6 @@ public:
         }
 
         hrp::dvector total_wrench = hrp::dvector::Zero(total_wrench_dim);
-        hrp::Vector3 ref_total_force = hrp::Vector3::Zero();
         total_wrench(0) = total_force(0);
         total_wrench(1) = total_force(1);
         total_wrench(2) = total_force(2);
@@ -866,7 +865,18 @@ public:
         }
 
         hrp::dvector ret(state_dim);
-        calcWeightedLinearEquation(ret, Gmat, Wmat, total_wrench);
+        hrp::dmatrix selection_matrix = hrp::dmatrix::Identity(6,6);
+        //hrp::dmatrix selection_matrix = hrp::dmatrix::Zero(3,6);
+        selection_matrix(0,2) = 1.0;
+        selection_matrix(1,3) = 1.0;
+        selection_matrix(2,4) = 1.0;
+        {
+            hrp::dvector tmp_total_wrench = hrp::dvector::Zero(selection_matrix.rows());
+            hrp::dmatrix tmp_Gmat = hrp::dmatrix::Zero(selection_matrix.rows(), Gmat.cols());
+            tmp_total_wrench = selection_matrix * total_wrench;
+            tmp_Gmat = selection_matrix * Gmat;
+            calcWeightedLinearEquation(ret, tmp_Gmat, Wmat, tmp_total_wrench);
+        }
 
         if (printp) {
             hrp::dvector tmpretv(total_wrench.size());
