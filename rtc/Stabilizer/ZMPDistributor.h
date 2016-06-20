@@ -730,61 +730,6 @@ public:
         double norm_moment_weight = 1e2;
         size_t total_wrench_dim = 6;
         size_t state_dim = 6*ee_num;
-        if (false) { // Temp
-            size_t total_wrench_dim = 5;
-            //size_t total_wrench_dim = 3;
-            hrp::dmatrix Wmat = hrp::dmatrix::Identity(state_dim/2, state_dim/2);
-            hrp::dmatrix Gmat = hrp::dmatrix::Zero(total_wrench_dim, state_dim/2);
-            for (size_t j = 0; j < ee_num; j++) {
-                if (total_wrench_dim == 3) {
-                    Gmat(0,3*j+2) = 1.0;
-                } else {
-                    for (size_t k = 0; k < 3; k++) Gmat(k,3*j+k) = 1.0;
-                }
-            }
-            for (size_t i = 0; i < total_wrench_dim; i++) {
-                for (size_t j = 0; j < ee_num; j++) {
-                    if ( i == total_wrench_dim-2 ) { // Nx
-                        Gmat(i,3*j+1) = -(cop_pos[j](2) - ref_zmp(2));
-                        Gmat(i,3*j+2) = (cop_pos[j](1) - ref_zmp(1));
-                    } else if ( i == total_wrench_dim-1 ) { // Ny
-                        Gmat(i,3*j) = (cop_pos[j](2) - ref_zmp(2));
-                        Gmat(i,3*j+2) = -(cop_pos[j](0) - ref_zmp(0));
-                    }
-                }
-            }
-            for (size_t j = 0; j < ee_num; j++) {
-                for (size_t i = 0; i < 3; i++) {
-                    if (i != 2 && ee_num == 2)
-                        Wmat(i+j*3, i+j*3) = 0;
-                    else
-                        Wmat(i+j*3, i+j*3) = Wmat(i+j*3, i+j*3) * limb_gains[j];
-                }
-            }
-            if (printp) {
-                std::cerr << "[" << print_str << "]   Wmat(diag) = [";
-                for (size_t j = 0; j < ee_num; j++) {
-                    for (size_t i = 0; i < 3; i++) {
-                        std::cerr << Wmat(i+j*3, i+j*3) << " ";
-                    }
-                }
-                std::cerr << "]" << std::endl;
-            }
-            hrp::dvector ret(state_dim/2);
-            hrp::dvector total_wrench = hrp::dvector::Zero(total_wrench_dim);
-            total_wrench(total_wrench_dim-3) = total_fz;
-            calcWeightedLinearEquation(ret, Gmat, Wmat, total_wrench);
-            for (size_t fidx = 0; fidx < ee_num; fidx++) {
-                ref_foot_force[fidx] = hrp::Vector3(ret(3*fidx), ret(3*fidx+1), ret(3*fidx+2));
-                ref_foot_moment[fidx] = hrp::Vector3::Zero();
-            }
-            // std::cerr << "GmatRef" << std::endl;
-            // std::cerr << Gmat << std::endl;
-            // std::cerr << "WmatRef" << std::endl;
-            // std::cerr << Wmat << std::endl;
-            // std::cerr << "ret" << std::endl;
-            // std::cerr << ret << std::endl;
-        }
         if (printp) {
             for (size_t i = 0; i < ee_num; i++) {
                 std::cerr << "[" << print_str << "]   "
@@ -824,30 +769,12 @@ public:
                 }
             }
         }
-        // for (size_t j = 0; j < ee_num; j++) {
-        //     for (size_t i = 0; i < 3; i++) {
-        //         Wmat(i+j*6, i+j*6) = fz_alpha_vector[j] * limb_gains[j];
-        //         Wmat(i+j*6+3, i+j*6+3) = (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
-        //     }
-        // }
         for (size_t j = 0; j < ee_num; j++) {
             for (size_t i = 0; i < 3; i++) {
-                // Wmat(i+j*6, i+j*6) = (i==2?1.0:0.0) * fz_alpha_vector[j] * limb_gains[j];
-                // Wmat(i+j*6+3, i+j*6+3) = (j>1?0.0:1.0) * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
-                // Wmat(i+j*6, i+j*6) = (j>1?0.1:1.0) * (i==2?1.0:0.0) * fz_alpha_vector[j] * limb_gains[j];
-                // Wmat(i+j*6+3, i+j*6+3) = (j>1?0.0:1.0) * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
                 Wmat(i+j*6, i+j*6) = ee_forcemoment_distribution_weight[j][i] * fz_alpha_vector[j] * limb_gains[j];
                 Wmat(i+j*6+3, i+j*6+3) = ee_forcemoment_distribution_weight[j][i+3] * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
             }
         }
-        // for (size_t j = 0; j < ee_num; j++) {
-        //     for (size_t i = 0; i < 3; i++) {
-        //         // Wmat(i+j*6, i+j*6) = 1.0* limb_gains[j];
-        //         // Wmat(i+j*6+3, i+j*6+3) = (1.0/norm_moment_weight) * 1.0 * limb_gains[j];
-        //         // Wmat(i+j*6, i+j*6) = (j > 1?0.1:1.0) * (i == 2 ? 1.0 : 0.0) * fz_alpha_vector[j] * 1.0 * limb_gains[j];
-        //         // Wmat(i+j*6+3, i+j*6+3) = (j > 1?0.0:1.0) * fz_alpha_vector[j] * (1.0/norm_moment_weight) * 1.0 * limb_gains[j];
-        //     }
-        // }
         if (printp) {
             std::cerr << "[" << print_str << "]   newWmat(diag) = [";
             for (size_t j = 0; j < ee_num; j++) {
