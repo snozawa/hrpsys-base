@@ -879,6 +879,15 @@ void Stabilizer::getActualParameters ()
                                              eefm_gravitational_acceleration * total_mass, dt,
                                              DEBUGP, std::string(m_profile.instance_name),
                                              (st_algorithm == OpenHRP::StabilizerService::EEFMQPCOP));
+      } else if (st_algorithm == OpenHRP::StabilizerService::EEFMQPCOP2) {
+          szd->distributeZMPToForceMomentsPseudoInverse2(ref_force, ref_moment,
+                                                         ee_pos, cop_pos, ee_rot, ee_name, limb_gains,
+                                                         new_refzmp, hrp::Vector3(foot_origin_rot * ref_zmp + foot_origin_pos),
+                                                         ref_total_force, ref_total_moment,
+                                                         ee_forcemoment_distribution_weight,
+                                                         eefm_gravitational_acceleration * total_mass, dt,
+                                                         DEBUGP, std::string(m_profile.instance_name),
+                                                         (st_algorithm == OpenHRP::StabilizerService::EEFMQPCOP));
       }
       // for debug output
       new_refzmp = foot_origin_rot.transpose() * (new_refzmp - foot_origin_pos);

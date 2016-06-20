@@ -21,7 +21,8 @@ module OpenHRP
       TPCC,
       EEFM,
       EEFMQP,
-      EEFMQPCOP
+      EEFMQPCOP,
+      EEFMQPCOP2
     };
 
     /**
