@@ -726,9 +726,6 @@ public:
         }
 
         // ref_foot_force and ref_foot_moment should be set
-        double norm_weight = 1e-7;
-        double norm_moment_weight = 1e2;
-        size_t total_wrench_dim = 6;
         size_t state_dim = 6*ee_num;
         if (printp) {
             std::cerr << "[" << print_str << "]   fz_alpha_vector [";
@@ -739,7 +736,7 @@ public:
         }
 #define FORCE_MOMENT_DIFF_CONTROL
 
-        hrp::dvector total_wrench = hrp::dvector::Zero(total_wrench_dim);
+        hrp::dvector total_wrench = hrp::dvector::Zero(6);
 #ifndef FORCE_MOMENT_DIFF_CONTROL
         total_wrench(0) = total_force(0);
         total_wrench(1) = total_force(1);
@@ -758,16 +755,16 @@ public:
 #endif
 
         hrp::dmatrix Wmat = hrp::dmatrix::Zero(state_dim, state_dim);
-        hrp::dmatrix Gmat = hrp::dmatrix::Zero(total_wrench_dim, state_dim);
+        hrp::dmatrix Gmat = hrp::dmatrix::Zero(6, state_dim);
         for (size_t j = 0; j < ee_num; j++) {
-            for (size_t k = 0; k < total_wrench_dim; k++) Gmat(k,6*j+k) = 1.0;
+            for (size_t k = 0; k < 6; k++) Gmat(k,6*j+k) = 1.0;
         }
-        for (size_t i = 0; i < total_wrench_dim; i++) {
+        for (size_t i = 0; i < 6; i++) {
             for (size_t j = 0; j < ee_num; j++) {
-                if ( i == total_wrench_dim-3 ) { // Nx
+                if ( i == 3 ) { // Nx
                     Gmat(i,6*j+1) = -(cop_pos[j](2) - new_refzmp(2));
                     Gmat(i,6*j+2) = (cop_pos[j](1) - new_refzmp(1));
-                } else if ( i == total_wrench_dim-2) { // Ny
+                } else if ( i == 4 ) { // Ny
                     Gmat(i,6*j) = (cop_pos[j](2) - new_refzmp(2));
                     Gmat(i,6*j+2) = -(cop_pos[j](0) - new_refzmp(0));
                 }
@@ -776,7 +773,9 @@ public:
         for (size_t j = 0; j < ee_num; j++) {
             for (size_t i = 0; i < 3; i++) {
                 Wmat(i+j*6, i+j*6) = ee_forcemoment_distribution_weight[j][i] * fz_alpha_vector[j] * limb_gains[j];
-                Wmat(i+j*6+3, i+j*6+3) = ee_forcemoment_distribution_weight[j][i+3] * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
+                //double norm_moment_weight = 1e2;
+                //Wmat(i+j*6+3, i+j*6+3) = ee_forcemoment_distribution_weight[j][i+3] * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
+                Wmat(i+j*6+3, i+j*6+3) = ee_forcemoment_distribution_weight[j][i+3] * fz_alpha_vector[j] * limb_gains[j];
             }
         }
         if (printp) {
@@ -800,11 +799,11 @@ public:
         selection_matrix(1,3) = 1.0;
         selection_matrix(2,4) = 1.0;
         {
-            hrp::dvector tmp_total_wrench = hrp::dvector::Zero(selection_matrix.rows());
-            hrp::dmatrix tmp_Gmat = hrp::dmatrix::Zero(selection_matrix.rows(), Gmat.cols());
-            tmp_total_wrench = selection_matrix * total_wrench;
-            tmp_Gmat = selection_matrix * Gmat;
-            calcWeightedLinearEquation(ret, tmp_Gmat, Wmat, tmp_total_wrench);
+            hrp::dvector selected_total_wrench = hrp::dvector::Zero(selection_matrix.rows());
+            hrp::dmatrix selected_Gmat = hrp::dmatrix::Zero(selection_matrix.rows(), Gmat.cols());
+            selected_total_wrench = selection_matrix * total_wrench;
+            selected_Gmat = selection_matrix * Gmat;
+            calcWeightedLinearEquation(ret, selected_Gmat, Wmat, selected_total_wrench);
         }
 
         if (printp) {
