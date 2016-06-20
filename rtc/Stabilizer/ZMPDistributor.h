@@ -802,9 +802,9 @@ public:
         total_wrench(4) = total_moment(1);
         total_wrench(5) = total_moment(2);
         for (size_t fidx = 0; fidx < ee_num; fidx++) {
-            double tmp_tau_x = -(cop_pos[fidx](2)-ref_zmp(2)) * ref_foot_force[fidx](1) + (cop_pos[fidx](1)-ref_zmp(1)) * ref_foot_force[fidx](2);
+            double tmp_tau_x = -(cop_pos[fidx](2)-new_refzmp(2)) * ref_foot_force[fidx](1) + (cop_pos[fidx](1)-new_refzmp(1)) * ref_foot_force[fidx](2);
             total_wrench(3) -= tmp_tau_x;
-            double tmp_tau_y = (cop_pos[fidx](2)-ref_zmp(2)) * ref_foot_force[fidx](0) - (cop_pos[fidx](0)-ref_zmp(0)) * ref_foot_force[fidx](2);
+            double tmp_tau_y = (cop_pos[fidx](2)-new_refzmp(2)) * ref_foot_force[fidx](0) - (cop_pos[fidx](0)-new_refzmp(0)) * ref_foot_force[fidx](2);
             total_wrench(4) -= tmp_tau_y;
         }
 
