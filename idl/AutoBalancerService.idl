@@ -3,6 +3,7 @@
  * @brief Services for the autobalancer interface
  */
 //#include "OpenHRPCommon.idl"
+#include "BasicDataType.idl"
 module OpenHRP
 {
   
@@ -12,6 +13,7 @@ module OpenHRP
     //typedef sequence<double, 4> DblSequence4;
     typedef double DblArray3[3];
     typedef double DblArray4[4];
+    typedef double DblArray12[12];
 
     /**
      * @struct Footstep
@@ -276,6 +278,19 @@ module OpenHRP
       GaitType default_gait_type;
       /// Sequence for all end-effectors' ik limb parameters
       sequence<IKLimbParameters> ik_limb_parameters;
+    };
+
+    struct SerializedStateData
+    {
+      DblArray12 baseTform;
+      sequence<boolean> refContactStates;
+      sequence<double> controlSwingSupportTime;
+    };
+
+    struct TimedSerializedStateData
+    {
+        RTC::Time tm;
+        SerializedStateData data;
     };
 
     /**

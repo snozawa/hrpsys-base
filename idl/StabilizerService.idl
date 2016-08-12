@@ -3,6 +3,7 @@
  * @brief Services for the stabilizer interface
  */
 #include "AutoBalancerService.idl"
+#include "BasicDataType.idl"
 
 module OpenHRP
 {
@@ -209,6 +210,21 @@ module OpenHRP
       boolean is_estop_while_walking;
       /// Sequence for all end-effectors' ik limb parameters
       sequence<IKLimbParameters> ik_limb_parameters;
+    };
+
+    struct SerializedStateData
+    {
+      DblArray3 zmp;
+      DblArray3 actCP;
+      DblArray3 refCP;
+      sequence<boolean> actContactStates;
+      sequence<double> COPInfo;
+    };
+
+    struct TimedSerializedStateData
+    {
+        RTC::Time tm;
+        SerializedStateData data;
     };
 
     /**
