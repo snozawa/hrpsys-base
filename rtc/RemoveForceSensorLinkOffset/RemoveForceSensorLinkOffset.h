@@ -114,6 +114,7 @@ class RemoveForceSensorLinkOffset
   // TimedDoubleSeq m_qRef;
   TimedDoubleSeq m_qCurrent;
   TimedOrientation3D m_rpy;
+  OpenHRP::RemoveForceSensorLinkOffsetService::TimedSerializedStateData m_serializedData;
   
   // DataInPort declaration
   // <rtc-template block="inport_declare">
@@ -128,6 +129,7 @@ class RemoveForceSensorLinkOffset
   std::vector<TimedDoubleSeq> m_force;
   std::vector<InPort<TimedDoubleSeq> *> m_forceIn;
   std::vector<OutPort<TimedDoubleSeq> *> m_forceOut;
+  OutPort<OpenHRP::RemoveForceSensorLinkOffsetService::TimedSerializedStateData> m_serializedDataOut;
   
   // </rtc-template>
 
