@@ -62,6 +62,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_actContactStatesOut("actContactStates", m_actContactStates),
     m_COPInfoOut("COPInfo", m_COPInfo),
     m_emergencySignalOut("emergencySignal", m_emergencySignal),
+    m_serializedDataOut("serializedData", m_serializedData),
     // for debug output
     m_originRefZmpOut("originRefZmp", m_originRefZmp),
     m_originRefCogOut("originRefCog", m_originRefCog),
@@ -123,6 +124,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("actContactStates", m_actContactStatesOut);
   addOutPort("COPInfo", m_COPInfoOut);
   addOutPort("emergencySignal", m_emergencySignalOut);
+  addOutPort("serializedData", m_serializedDataOut);
   // for debug output
   addOutPort("originRefZmp", m_originRefZmpOut);
   addOutPort("originRefCog", m_originRefCogOut);
@@ -429,6 +431,9 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   rel_ee_rot.reserve(stikp.size());
   rel_ee_name.reserve(stikp.size());
 
+  m_serializedData.data.actContactStates.length(m_contactStates.data.length());
+  m_serializedData.data.COPInfo.length(m_COPInfo.data.length());
+
   return RTC::RTC_OK;
 }
 
@@ -649,6 +654,21 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_currentBasePosOut.write();
       m_debugData.tm = m_qRef.tm;
       m_debugDataOut.write();
+      // Serialized Data
+      m_serializedData.data.zmp[0] = m_zmp.data.x;
+      m_serializedData.data.zmp[1] = m_zmp.data.y;
+      m_serializedData.data.zmp[2] = m_zmp.data.z;
+      m_serializedData.data.actCP[0] = m_actCP.data.x;
+      m_serializedData.data.actCP[1] = m_actCP.data.y;
+      m_serializedData.data.actCP[2] = m_actCP.data.z;
+      m_serializedData.data.refCP[0] = m_refCP.data.x;
+      m_serializedData.data.refCP[1] = m_refCP.data.y;
+      m_serializedData.data.refCP[2] = m_refCP.data.z;
+      for (size_t i = 0; i < m_contactStates.data.length(); i++)
+          m_serializedData.data.actContactStates[i] = m_contactStates.data[i];
+      for (size_t i = 0; i < m_COPInfo.data.length(); i++)
+          m_serializedData.data.COPInfo[i] = m_COPInfo.data[i];
+      m_serializedDataOut.write();
     }
     m_qRefOut.write();
     // emergencySignal
