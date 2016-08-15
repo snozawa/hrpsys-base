@@ -76,6 +76,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_allRefWrenchOut("allRefWrench", m_allRefWrench),
     m_allEECompOut("allEEComp", m_allEEComp),
     m_debugDataOut("debugData", m_debugData),
+    m_serializedStateDataOut("serializedStateData", m_serializedStateData),
     control_mode(MODE_IDLE),
     st_algorithm(OpenHRP::StabilizerService::TPCC),
     emergency_check_mode(OpenHRP::StabilizerService::NO_CHECK),
@@ -137,6 +138,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addOutPort("allRefWrench", m_allRefWrenchOut);
   addOutPort("allEEComp", m_allEECompOut);
   addOutPort("debugData", m_debugDataOut);
+  addOutPort("serializedStateData", m_serializedStateDataOut);
   
   // Set service provider to Ports
   m_StabilizerServicePort.registerProvider("service0", "StabilizerService", m_service0);
@@ -429,6 +431,11 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   rel_ee_rot.reserve(stikp.size());
   rel_ee_name.reserve(stikp.size());
 
+  // Serialized State Data
+  m_serializedStateData.data.length(3+3+3 // zmp, actCapturePoint, refCapturePoint
+                                    +m_contactStates.data.length() // contactStates
+                                    +m_COPInfo.data.length()); // COPInfo
+
   return RTC::RTC_OK;
 }
 
@@ -649,6 +656,22 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
       m_currentBasePosOut.write();
       m_debugData.tm = m_qRef.tm;
       m_debugDataOut.write();
+      // serialized State Data
+      m_serializedStateData.tm = m_qRef.tm;
+      m_serializedStateData.data[0] = m_zmp.data.x;
+      m_serializedStateData.data[1] = m_zmp.data.y;
+      m_serializedStateData.data[2] = m_zmp.data.z;
+      m_serializedStateData.data[3] = m_actCP.data.x;
+      m_serializedStateData.data[4] = m_actCP.data.y;
+      m_serializedStateData.data[5] = m_actCP.data.z;
+      m_serializedStateData.data[6] = m_refCP.data.x;
+      m_serializedStateData.data[7] = m_refCP.data.y;
+      m_serializedStateData.data[8] = m_refCP.data.z;
+      for (size_t i = 0; i < m_contactStates.data.length(); i++)
+        m_serializedStateData.data[8+i] = static_cast<double>(m_contactStates.data[i]);
+      for (size_t i = 0; i < m_COPInfo.data.length(); i++)
+        m_serializedStateData.data[8+m_contactStates.data.length()+i] = m_COPInfo.data[i];
+      m_serializedStateDataOut.write();
     }
     m_qRefOut.write();
     // emergencySignal

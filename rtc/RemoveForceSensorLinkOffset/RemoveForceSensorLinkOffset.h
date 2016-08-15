@@ -128,6 +128,8 @@ class RemoveForceSensorLinkOffset
   std::vector<TimedDoubleSeq> m_force;
   std::vector<InPort<TimedDoubleSeq> *> m_forceIn;
   std::vector<OutPort<TimedDoubleSeq> *> m_forceOut;
+  RTC::TimedDoubleSeq m_serializedStateData;
+  RTC::OutPort<RTC::TimedDoubleSeq> m_serializedStateDataOut;
   
   // </rtc-template>
 

@@ -62,6 +62,7 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_AutoBalancerServicePort("AutoBalancerService"),
       m_walkingStatesOut("walkingStates", m_walkingStates),
       m_sbpCogOffsetOut("sbpCogOffset", m_sbpCogOffset),
+      m_serializedStateDataOut("serializedStateData", m_serializedStateData),
       // </rtc-template>
       gait_type(BIPED),
       move_base_gain(0.8),
@@ -104,6 +105,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addOutPort("cogOut", m_cogOut);
     addOutPort("walkingStates", m_walkingStatesOut);
     addOutPort("sbpCogOffset", m_sbpCogOffsetOut);
+    addOutPort("serializedStateData", m_serializedStateDataOut);
   
     // Set service provider to Ports
     m_AutoBalancerServicePort.registerProvider("service0", "AutoBalancerService", m_service0);
@@ -339,6 +341,9 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     rot_ik_thre = (1e-2)*M_PI/180.0; // [rad]
     ik_error_debug_print_freq = static_cast<int>(0.2/m_dt); // once per 0.2 [s]
 
+    // serialized state data
+    m_serializedStateData.data.length(m_baseTform.data.length()+m_contactStates.data.length()+m_controlSwingSupportTime.data.length());
+
     return RTC::RTC_OK;
 }
 
@@ -535,6 +540,16 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
       m_sbpCogOffset.data.y = sbp_cog_offset(1);
       m_sbpCogOffset.data.z = sbp_cog_offset(2);
       m_sbpCogOffset.tm = m_qRef.tm;
+      // serialized
+      m_serializedStateData.tm = m_qRef.tm;
+      for (size_t i = 0; i < m_baseTform.data.length(); i++)
+        m_serializedStateData.data[i] = m_baseTform.data[i];
+      size_t tmp_idx = m_baseTform.data.length();
+      for (size_t i = 0; i < m_contactStates.data.length(); i++)
+        m_serializedStateData.data[tmp_idx+i] = static_cast<double>(m_contactStates.data[i]);
+      tmp_idx += m_contactStates.data.length();
+      for (size_t i = 0; i < m_controlSwingSupportTime.data.length(); i++)
+        m_serializedStateData.data[tmp_idx+i] = m_controlSwingSupportTime.data[i];
     }
     m_basePosOut.write();
     m_baseRpyOut.write();
@@ -543,6 +558,7 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
     m_zmpOut.write();
     m_cogOut.write();
     m_sbpCogOffsetOut.write();
+    m_serializedStateDataOut.write();
 
     // reference acceleration
     hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
