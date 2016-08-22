@@ -1446,19 +1446,20 @@ void Stabilizer::calcEEForceMomentControl() {
           }
           for (size_t i = 0; i < stikp.size(); i++) {
               if (contact_states[contact_states_index_map[stikp[i].ee_name]]) {
-                  for (size_t j = 0; j < 3; j++) {
-                      d_rpy_swing.at(i)[j] = (-1 / stikp[i].eefm_swing_rot_time_const[j] * d_rpy_swing.at(i)[j]) * dt + d_rpy_swing.at(i)[j];
-                      d_pos_swing.at(i)[j] = (-1 / stikp[i].eefm_swing_pos_time_const[j] * d_pos_swing.at(i)[j]) * dt + d_pos_swing.at(i)[j];
-                  }
+                  // Hold
+                hrp::Vector3 tmpdiffp = target_ee_diff_p_filter[i]->getCurrentValue();
+                for (size_t j = 0; j < 3; j++) {
+                    tmpdiffp(j) = stikp[i].eefm_swing_pos_spring_gain[j] * tmpdiffp(j);
+                }
+                d_pos_swing.at(i) = vlimit(tmpdiffp, -30*1e-3, 30*1e-3);
+                d_rpy_swing.at(i) = hrp::Vector3::Zero();
               } else {
                   /* rotation */
                   {
                       hrp::Matrix33 cur_swg_R = foot_origin_rot.transpose() * tmpR_list.at(i);
                       hrp::Matrix33 new_swg_R = cur_sup_R * (act_sup_R.transpose() * cur_swg_R);
                       hrp::Vector3 tmp_diff_rpy = hrp::rpyFromRot(cur_swg_R.transpose() * new_swg_R);
-                      for (size_t j = 0; j < 3; j++) {
-                          d_rpy_swing.at(i)[j] = (stikp[i].eefm_swing_rot_spring_gain[j] * tmp_diff_rpy[j] - 1 / stikp[i].eefm_swing_rot_time_const[j] * d_rpy_swing.at(i)[j]) * dt + d_rpy_swing.at(i)[j];
-                      }
+                      d_rpy_swing.at(i) = hrp::Vector3::Zero();
                       /* 
                        * if (is_feedback_control_enable[i] && loop % static_cast <int>(0.2/dt) == 0 ) { // once per 0.2[s]
                        *     std::cerr << "[" << m_profile.instance_name << "] [" << stikp[i].ee_name << "]  actual support : " << (hrp::rpyFromRot(act_sup_R) / M_PI * 180.0).format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "[deg]" << std::endl;
@@ -1473,9 +1474,14 @@ void Stabilizer::calcEEForceMomentControl() {
                       hrp::Vector3 cur_swg_p = foot_origin_rot.transpose() * (tmpp_list.at(i) - foot_origin_pos);
                       hrp::Vector3 new_swg_p = cur_sup_p + cur_sup_R * (act_sup_R.transpose() * (cur_swg_p - act_sup_p));
                       hrp::Vector3 tmp_diff_pos = new_swg_p - cur_swg_p;
+                      hrp::Vector3 tmpdiffp = target_ee_diff_p_filter[i]->passFilter(target_ee_diff_p[i]);
                       for (size_t j = 0; j < 3; j++) {
-                          d_pos_swing.at(i)[j] = (stikp[i].eefm_swing_pos_spring_gain[j] * tmp_diff_pos[j] - 1 / stikp[i].eefm_swing_pos_time_const[j] * d_pos_swing.at(i)[j]) * dt + d_pos_swing.at(i)[j];
+                          tmpdiffp(j) = stikp[i].eefm_swing_pos_spring_gain[j] * tmpdiffp(j);
                       }
+                      if (stikp[i].eefm_swing_pos_spring_gain[0] > 0.1 && m_debugLevel >= 1 ) {
+                        std::cerr << "[" << m_profile.instance_name << "] [" << stikp[i].ee_name << "]  diffp : " << hrp::Vector3(1e3*tmpdiffp).format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "[mm]" << std::endl;
+                      }
+                      d_pos_swing.at(i) = vlimit(tmpdiffp, -30*1e-3, 30*1e-3);
                       /* 
                        * if (is_feedback_control_enable[i] && loop % static_cast <int>(0.2/dt) == 0 ) { // once per 0.2[s]
                        *     std::cerr << "[" << m_profile.instance_name << "] [" << stikp[i].ee_name << "]  actual support : " << (act_sup_p * 1e3).format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "[mm]" << std::endl;
@@ -1579,6 +1585,7 @@ void Stabilizer::sync_2_st ()
     d_pos_swing[i] = hrp::Vector3::Zero();
     STIKParam& ikp = stikp[i];
     ikp.d_foot_pos = ikp.d_foot_rpy = ikp.ee_d_foot_rpy = hrp::Vector3::Zero();
+    target_ee_diff_p_filter[i]->reset(hrp::Vector3::Zero());
   }
   if (on_ground) {
     transition_count = -1 * transition_time / dt;
