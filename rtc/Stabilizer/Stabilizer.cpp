@@ -1445,7 +1445,7 @@ void Stabilizer::calcEEForceMomentControl() {
               }
           }
           for (size_t i = 0; i < stikp.size(); i++) {
-              if (contact_states[contact_states_index_map[stikp[i].ee_name]]) {
+              if (contact_states[contact_states_index_map[stikp[i].ee_name]] || isContact(contact_states_index_map[stikp[i].ee_name])) {
                   // Hold
                 hrp::Vector3 tmpdiffp = target_ee_diff_p_filter[i]->getCurrentValue();
                 for (size_t j = 0; j < 3; j++) {
