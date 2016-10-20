@@ -314,8 +314,27 @@ namespace rats
       size_t current_count = one_step_count - lcg_count;
       double dif_angle = 0.0;
       hrp::Vector3 ee_local_pivot_pos(hrp::Vector3(0,0,0));
-      double first_goal_angle = _current_toe_angle, second_goal_angle = -1 * _current_heel_angle;
-      double first_pos_offset_x = toe_pos_offset_x, second_pos_offset_x = heel_pos_offset_x;
+      double first_goal_angle, second_goal_angle, first_pos_offset_x, second_pos_offset_x;
+      if (thtc.get_src_type() == TOE) {
+          first_goal_angle = _current_toe_angle;
+          first_pos_offset_x = toe_pos_offset_x;
+      } else if (thtc.get_src_type() == HEEL) {
+          first_goal_angle = -1 * _current_heel_angle;
+          first_pos_offset_x = heel_pos_offset_x;
+      } else {
+          first_goal_angle = first_pos_offset_x = 0;
+      }
+      if (thtc.get_dst_type() == TOE) {
+          second_goal_angle = _current_toe_angle;
+          second_pos_offset_x = toe_pos_offset_x;
+      } else if (thtc.get_dst_type() == HEEL) {
+          second_goal_angle = -1 * _current_heel_angle;
+          second_pos_offset_x = heel_pos_offset_x;
+      } else {
+          second_goal_angle = second_pos_offset_x = 0;
+      }
+      // double first_goal_angle = _current_toe_angle, second_goal_angle = -1 * _current_heel_angle;
+      // double first_pos_offset_x = toe_pos_offset_x, second_pos_offset_x = heel_pos_offset_x;
       // double second_goal_angle = _current_toe_angle, first_goal_angle = -1 * _current_heel_angle;
       // double second_pos_offset_x = toe_pos_offset_x, first_pos_offset_x = heel_pos_offset_x;
       // double second_goal_angle = _current_toe_angle, first_goal_angle = _current_toe_angle;
@@ -499,6 +518,10 @@ namespace rats
           break;
       }
       reset_foot_ratio_interpolator();
+      thtc.set_toe_heel_types_from_swing_src_swing_dst_support_coords(swing_leg_src_steps.front().worldcoords, swing_leg_dst_steps.front().worldcoords, support_leg_steps.front().worldcoords,
+                                                                      toe_pos_offset_x, heel_pos_offset_x);
+      // TMP
+      std::cerr << "CHECK "; thtc.print_current_types();
     }
   };
 

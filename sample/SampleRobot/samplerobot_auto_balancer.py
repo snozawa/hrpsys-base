@@ -710,6 +710,7 @@ def demoStandingPosResetting():
 
 def demo():
     init()
+    return
     from distutils.version import StrictVersion
     if StrictVersion(hrpsys_version) >= StrictVersion('315.5.0'):
         # sample for AutoBalancer mode

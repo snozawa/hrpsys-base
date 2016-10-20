@@ -221,6 +221,7 @@ def demoSTToeHeelWalk ():
         hcf.startStabilizer ()
         hcf.seq_svc.setJointAngles(initial_pose, 2.0);
         hcf.waitInterpolation();
+        hcf.co_svc.disableCollisionDetection()
         # set gg param
         ggp = hcf.abc_svc.getGaitGeneratorParam()[1]
         org_ggp = hcf.abc_svc.getGaitGeneratorParam()[1]
@@ -229,7 +230,7 @@ def demoSTToeHeelWalk ():
         ggp.swing_trajectory_time_offset_xy2z=0.1
         ggp.swing_trajectory_delay_time_offset=0.2
         #ggp.toe_heel_phase_ratio=[0.01, 0.25, 0.23, 0.0, 0.22, 0.28, 0.01]
-        ggp.toe_heel_phase_ratio=[0.05, 0.35, 0.20, 0.0, 0.13, 0.13, 0.14]
+        ggp.toe_heel_phase_ratio=[0.05, 0.35, 0.15, 0.0, 0.08, 0.23, 0.14]
         ggp.toe_pos_offset_x = 1e-3*182.0;
         ggp.heel_pos_offset_x = 1e-3*-72.0;
         ggp.toe_zmp_offset_x = 1e-3*182.0;
@@ -249,14 +250,17 @@ def demoSTToeHeelWalk ():
         hcf.abc_svc.waitFootSteps();
         # test goPos
         ggp.default_double_support_ratio=0.2
-        ggp.stride_parameter=[0.22,0.1,20.0,0.05]
-        ggp.toe_angle = 20;
+        #ggp.stride_parameter=[0.22,0.1,20.0,0.05]
+        ggp.stride_parameter=[0.22,0.1,20.0,0.22]
+        #ggp.toe_angle = 20;
+        ggp.toe_angle = 10;
         ggp.heel_angle = 10;
         hcf.abc_svc.setGaitGeneratorParam(ggp)
         hcf.abc_svc.goPos(0.66,0.2,40);
         hcf.abc_svc.waitFootSteps();
         # finish
         hcf.stopStabilizer ()
+        hcf.co_svc.enableCollisionDetection()
         hcf.abc_svc.setGaitGeneratorParam(org_ggp)
         ret = checkActualBaseAttitude()
         if ret:
@@ -269,6 +273,7 @@ def demo():
     OPENHRP3_DIR=check_output(['pkg-config', 'openhrp3.1', '--variable=prefix']).rstrip()
     if os.path.exists(OPENHRP3_DIR+"/share/OpenHRP-3.1/sample/model/sample1_bush.wrl"):
         init()
+        return
         if StrictVersion(hrpsys_version) >= StrictVersion('315.5.0'):
             demoGetParameter()
             demoSetParameter()

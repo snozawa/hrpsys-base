@@ -102,6 +102,7 @@ namespace rats
      *   SOLE2 : Sole contact (end). Foot angle is 0. ZMP transition is heel -> ee.
      */
     enum toe_heel_phase {SOLE0, SOLE2TOE, TOE2SOLE, SOLE1, SOLE2HEEL, HEEL2SOLE, SOLE2, NUM_TH_PHASES};
+    enum toe_heel_type {SOLE, TOE, HEEL};
     static double no_using_toe_heel_ratio = 1.0; // Ratio not to use toe and heel contact
     static double using_toe_heel_ratio = 0.0; // Ratio to use toe and heel contact
 
@@ -219,6 +220,57 @@ namespace rats
                 return using_toe_heel_ratio;
             }
         };
+    };
+
+    /* Checker for toe heel type. */
+    class toe_heel_type_checker
+    {
+    private:
+        double toe_thre, heel_thre; // [m]
+        toe_heel_type src_type, dst_type;
+        toe_heel_type check_toe_heel_type_from_swing_support_coords (const coordinates& swing_coords, const coordinates& support_coords, const double toe_pos_offset_x, const double heel_pos_offset_x)
+        {
+            hrp::Vector3 local_toe_pos = support_coords.rot.transpose() * (swing_coords.rot * hrp::Vector3(toe_pos_offset_x,0,0) + swing_coords.pos - support_coords.pos);
+            hrp::Vector3 local_heel_pos = support_coords.rot.transpose() * (swing_coords.rot * hrp::Vector3(heel_pos_offset_x,0,0) + swing_coords.pos - support_coords.pos);
+            if (local_toe_pos(0) + toe_thre < 0) {
+                return TOE;
+            } else if (local_heel_pos(0) - heel_thre > 0) {
+                return HEEL;
+            } else {
+                return SOLE;
+            }
+        };
+        std::string get_toe_heel_type_string(const toe_heel_type tp)
+        {
+            if (tp==TOE) return "TOE";
+            else if (tp==HEEL) return "HEEL";
+            else return "SOLE";
+        };
+    public:
+        toe_heel_type_checker () : toe_thre(30*1e-3), heel_thre(50*1e-3), src_type(SOLE), dst_type(SOLE)
+        {
+        };
+        toe_heel_type_checker (const double _toe_thre, const double _heel_thre) : toe_thre(_toe_thre), heel_thre(_heel_thre), src_type(SOLE), dst_type(SOLE)
+        {
+        };
+        void set_toe_heel_types_from_swing_src_swing_dst_support_coords (const coordinates& swing_src_coords, const coordinates& swing_dst_coords, const coordinates& support_coords,
+                                                                         const double toe_pos_offset_x, const double heel_pos_offset_x)
+        {
+            src_type = check_toe_heel_type_from_swing_support_coords(swing_src_coords, support_coords, toe_pos_offset_x, heel_pos_offset_x);
+            dst_type = check_toe_heel_type_from_swing_support_coords(swing_dst_coords, support_coords, toe_pos_offset_x, heel_pos_offset_x);
+        };
+        void print_current_types ()
+        {
+            std::cerr << get_toe_heel_type_string(src_type) << " " << get_toe_heel_type_string(dst_type) << std::endl;
+        };
+        // Setter
+        void set_toe_thre (const double _toe_thre) { toe_thre = _toe_thre; };
+        void set_heel_thre (const double _heel_thre) { heel_thre = _heel_thre; };
+        // Getter
+        double get_toe_thre () const { return toe_thre; };
+        double get_heel_thre () const { return heel_thre; };
+        toe_heel_type get_src_type () const { return src_type; };
+        toe_heel_type get_dst_type () const { return dst_type; };
     };
 
     /* refzmp_generator to generate current refzmp from footstep_node_list */
@@ -645,6 +697,7 @@ namespace rats
       cycloid_delay_kick_hoffarbib_trajectory_generator cdktg;
       cross_delay_hoffarbib_trajectory_generator crdtg;
       toe_heel_phase_counter thp;
+      toe_heel_type_checker thtc;
       interpolator* foot_ratio_interpolator;
       interpolator* swing_foot_rot_ratio_interpolator;
       // Parameters for toe-heel contact
@@ -677,7 +730,7 @@ namespace rats
           time_offset(0.35), final_distance_weight(1.0), time_offset_xy2z(0),
           footstep_index(0), lcg_count(0), default_orbit_type(CYCLOID),
           rdtg(), cdtg(),
-          thp(),
+          thp(), thtc(),
           foot_ratio_interpolator(NULL), swing_foot_rot_ratio_interpolator(NULL), toe_heel_interpolator(NULL),
           toe_pos_offset_x(0.0), heel_pos_offset_x(0.0), toe_angle(0.0), heel_angle(0.0), foot_dif_rot_angle(0.0), use_toe_joint(false)
       {
@@ -694,6 +747,9 @@ namespace rats
         foot_ratio_interpolator->setName("GaitGenerator foot_ratio_interpolator");
         swing_foot_rot_ratio_interpolator->setName("GaitGenerator swing_foot_rot_ratio_interpolator");
         toe_heel_interpolator->setName("GaitGenerator toe_heel_interpolator");
+        // TMP
+        thtc.set_toe_thre(0);
+        thtc.set_heel_thre(0);
       };
       ~leg_coords_generator()
       {
