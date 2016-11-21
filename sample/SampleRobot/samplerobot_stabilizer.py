@@ -106,6 +106,10 @@ def checkActualBaseAttitude(thre=5.0): # degree
     print >> sys.stderr, "  ret = ", ret, ", actual base rpy = (", act_rpy, ")"
     return ret
 
+def checkActualBase(): # degree
+    act_base = checkParameterFromLog("WAIST")
+    print >> sys.stderr, "  base rpy = ", act_base
+
 def changeSTAlgorithm (new_st_alg):
     stp = hcf.st_svc.getParameter()
     if stp.st_algorithm != new_st_alg:
@@ -185,12 +189,16 @@ def demoStartStopEEFMQPST ():
 def demoSTStairWalk ():
     print >> sys.stderr, "6. EEFMQPCOP + stair"
     if hcf.pdc:
+        print >> sys.stderr, "6-1."
+        checkActualBase()
         # setup controllers
         changeSTAlgorithm (OpenHRP.StabilizerService.EEFMQPCOP)
         hcf.startStabilizer()
         hcf.startAutoBalancer()
         hcf.seq_svc.setJointAngles(half_sitting_pose, 1.0);
         hcf.waitInterpolation();
+        print >> sys.stderr, "6-2."
+        checkActualBase()
         # set gg param
         ggp = hcf.abc_svc.getGaitGeneratorParam()[1]
         org_ggp = hcf.abc_svc.getGaitGeneratorParam()[1]
@@ -207,14 +215,22 @@ def demoSTStairWalk ():
         ggp.toe_angle = 20;
         ggp.heel_angle = 10;
         hcf.abc_svc.setGaitGeneratorParam(ggp)
+        print >> sys.stderr, "6-3."
+        checkActualBase()
         hcf.setFootSteps([OpenHRP.AutoBalancerService.Footsteps([OpenHRP.AutoBalancerService.Footstep([0,-0.09,0], [1,0,0,0], "rleg")]),
                           OpenHRP.AutoBalancerService.Footsteps([OpenHRP.AutoBalancerService.Footstep([0.27,0.09,0.1], [1,0,0,0], "lleg")]),
                           OpenHRP.AutoBalancerService.Footsteps([OpenHRP.AutoBalancerService.Footstep([0.27,-0.09,0.1], [1,0,0,0], "rleg")]),
                           OpenHRP.AutoBalancerService.Footsteps([OpenHRP.AutoBalancerService.Footstep([0.54,0.09,0], [1,0,0,0], "lleg")]),
                           OpenHRP.AutoBalancerService.Footsteps([OpenHRP.AutoBalancerService.Footstep([0.54,-0.09,0], [1,0,0,0], "rleg")])]);
+        print >> sys.stderr, "6-3."
+        checkActualBase()
         hcf.abc_svc.waitFootSteps();
+        print >> sys.stderr, "6-4."
+        checkActualBase()
         # finish
         hcf.abc_svc.setGaitGeneratorParam(org_ggp)
+        print >> sys.stderr, "6-5."
+        checkActualBase()
         ret = checkActualBaseAttitude()
         if ret:
             print >> sys.stderr, "  ST + Stair => OK"
