@@ -713,7 +713,7 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
           m_serializedStateData.data.refCapturePoint.y = m_refCP.data.y;
           m_serializedStateData.data.refCapturePoint.z = m_refCP.data.z;
           for (size_t i = 0; i < m_contactStates.data.length(); i++)
-              m_serializedStateData.data.contactStates[i] = m_contactStates.data[i];
+              m_serializedStateData.data.contactStates[i] = m_actContactStates.data[i];
           for (size_t i = 0; i < m_COPInfo.data.length(); i++)
               m_serializedStateData.data.COPInfo[i] = m_COPInfo.data[i];
           m_serializedStateDataOut.write();
