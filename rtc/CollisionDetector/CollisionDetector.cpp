@@ -65,6 +65,7 @@ CollisionDetector::CollisionDetector(RTC::Manager* manager)
       m_servoStateIn("servoStateIn", m_servoState),
       m_qOut("q", m_q),
       m_beepCommandOut("beepCommand", m_beepCommand),
+      m_isIdleOut("isIdle", m_isIdle),
       m_CollisionDetectorServicePort("CollisionDetectorService"),
       // </rtc-template>
 #ifdef USE_HRPSYSUTIL
@@ -117,6 +118,7 @@ RTC::ReturnCode_t CollisionDetector::onInitialize()
     // Set OutPort buffer
     addOutPort("q", m_qOut);
     addOutPort("beepCommand", m_beepCommandOut);
+    addOutPort("isIdle", m_isIdleOut);
   
     // Set service provider to Ports
     m_CollisionDetectorServicePort.registerProvider("service0", "CollisionDetectorService", m_service0);
@@ -287,6 +289,7 @@ RTC::ReturnCode_t CollisionDetector::onInitialize()
 
     collision_beep_freq = static_cast<int>(1.0/(3.0*m_dt)); // 3 times / 1[s]
     m_beepCommand.data.length(bc.get_num_beep_info());
+    m_isIdle.data = false;
     return RTC::RTC_OK;
 }
 
@@ -599,6 +602,11 @@ RTC::ReturnCode_t CollisionDetector::onExecute(RTC::UniqueId ec_id)
           if (is_beep_port_connected) bc.stopBeep();
           collision_beep_count = 0;
         }
+        if ( (!m_safe_posture && has_servoOn) || m_recover_time > 0 ) {
+            m_isIdle.data = false;
+        } else {
+            m_isIdle.data = true;
+        }
 
         if ( ++m_loop_for_check >= m_collision_loop ) m_loop_for_check = 0;
         tp.posture.resize(m_qRef.data.length());
@@ -644,6 +652,8 @@ RTC::ReturnCode_t CollisionDetector::onExecute(RTC::UniqueId ec_id)
       bc.setDataPort(m_beepCommand);
       if (bc.isWritable()) m_beepCommandOut.write();
     }
+    m_isIdle.tm = m_qRef.tm;
+    m_isIdleOut.write();
 #ifdef USE_HRPSYSUTIL
     if ( m_use_viewer ) m_window.oneStep();
 #endif // USE_HRPSYSUTIL

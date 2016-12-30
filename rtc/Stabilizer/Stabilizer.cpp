@@ -66,6 +66,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     m_qRefSeqIn("qRefSeq", m_qRefSeq),
     m_walkingStatesIn("walkingStates", m_walkingStates),
     m_sbpCogOffsetIn("sbpCogOffset", m_sbpCogOffset),
+    m_isHoldCompensationIn("isHoldCommpensation", m_isHoldCompensation),
     m_qRefOut("q", m_qRef),
     m_tauOut("tau", m_tau),
     m_zmpOut("zmp", m_zmp),
@@ -92,6 +93,7 @@ Stabilizer::Stabilizer(RTC::Manager* manager)
     st_algorithm(OpenHRP::StabilizerService::TPCC),
     emergency_check_mode(OpenHRP::StabilizerService::NO_CHECK),
     szd(NULL),
+    is_hold_compensation(false),
     // </rtc-template>
     m_debugLevel(0)
 {
@@ -126,6 +128,7 @@ RTC::ReturnCode_t Stabilizer::onInitialize()
   addInPort("qRefSeq", m_qRefSeqIn);
   addInPort("walkingStates", m_walkingStatesIn);
   addInPort("sbpCogOffset", m_sbpCogOffsetIn);
+  addInPort("isHoldCommpensation", m_isHoldCompensationIn);
 
   // Set OutPort buffer
   addOutPort("q", m_qRefOut);
@@ -598,6 +601,10 @@ RTC::ReturnCode_t Stabilizer::onExecute(RTC::UniqueId ec_id)
     sbp_cog_offset(1) = m_sbpCogOffset.data.y;
     sbp_cog_offset(2) = m_sbpCogOffset.data.z;
   }
+  if (m_isHoldCompensationIn.isNew()) {
+      m_isHoldCompensationIn.read();
+      is_hold_compensation = m_isHoldCompensation.data;
+  }
 
   if (is_legged_robot) {
     getCurrentParameters();
@@ -843,8 +850,10 @@ void Stabilizer::getActualParameters ()
     hrp::Vector3 dcogvel=foot_origin_rot * (ref_cogvel - act_cogvel);
     hrp::Vector3 dzmp=foot_origin_rot * (ref_zmp - act_zmp);
     new_refzmp = foot_origin_rot * new_refzmp + foot_origin_pos;
+    if (!is_hold_compensation) {
     for (size_t i = 0; i < 2; i++) {
       new_refzmp(i) += eefm_k1[i] * transition_smooth_gain * dcog(i) + eefm_k2[i] * transition_smooth_gain * dcogvel(i) + eefm_k3[i] * transition_smooth_gain * dzmp(i) + ref_zmp_aux(i);
+    }
     }
     if (DEBUGP) {
       // All state variables are foot_origin coords relative
@@ -987,12 +996,16 @@ void Stabilizer::getActualParameters ()
           hrp::Vector3 tmp_damping_gain;
           if (!eefm_use_swing_damping || !large_swing_m_diff) tmp_damping_gain = (1-transition_smooth_gain) * ikp.eefm_rot_damping_gain * 10 + transition_smooth_gain * ikp.eefm_rot_damping_gain;
           else tmp_damping_gain = (1-transition_smooth_gain) * eefm_swing_rot_damping_gain * 10 + transition_smooth_gain * eefm_swing_rot_damping_gain;
-          ikp.d_foot_rpy = calcDampingControl(ikp.ref_moment, ee_moment, ikp.d_foot_rpy, tmp_damping_gain, ikp.eefm_rot_time_const);
+          if (!is_hold_compensation) {
+              ikp.d_foot_rpy = calcDampingControl(ikp.ref_moment, ee_moment, ikp.d_foot_rpy, tmp_damping_gain, ikp.eefm_rot_time_const);
+          }
           ikp.d_foot_rpy = vlimit(ikp.d_foot_rpy, -1 * ikp.eefm_rot_compensation_limit, ikp.eefm_rot_compensation_limit);
         }
         if (!eefm_use_force_difference_control) { // Pos
             hrp::Vector3 tmp_damping_gain = (1-transition_smooth_gain) * ikp.eefm_pos_damping_gain * 10 + transition_smooth_gain * ikp.eefm_pos_damping_gain;
-            ikp.d_foot_pos = calcDampingControl(ikp.ref_force, sensor_force, ikp.d_foot_pos, tmp_damping_gain, ikp.eefm_pos_time_const_support);
+            if (!is_hold_compensation) {
+                ikp.d_foot_pos = calcDampingControl(ikp.ref_force, sensor_force, ikp.d_foot_pos, tmp_damping_gain, ikp.eefm_pos_time_const_support);
+            }
             ikp.d_foot_pos = vlimit(ikp.d_foot_pos, -1 * ikp.eefm_pos_compensation_limit, ikp.eefm_pos_compensation_limit);
         }
         // Actual ee frame =>
@@ -1018,15 +1031,19 @@ void Stabilizer::getActualParameters ()
             hrp::Vector3 tmp_damping_gain;
             if (!large_swing_f_diff) tmp_damping_gain = (1-transition_smooth_gain) * stikp[0].eefm_pos_damping_gain * 10 + transition_smooth_gain * stikp[0].eefm_pos_damping_gain;
             else tmp_damping_gain = (1-transition_smooth_gain) * eefm_swing_pos_damping_gain * 10 + transition_smooth_gain * eefm_swing_pos_damping_gain;
-            pos_ctrl = calcDampingControl (ref_f_diff, f_diff, pos_ctrl,
-                                           tmp_damping_gain, stikp[0].eefm_pos_time_const_support);
+            if (!is_hold_compensation) {
+                pos_ctrl = calcDampingControl (ref_f_diff, f_diff, pos_ctrl,
+                                               tmp_damping_gain, stikp[0].eefm_pos_time_const_support);
+            }
           } else {
             if ( (contact_states[contact_states_index_map["rleg"]] && contact_states[contact_states_index_map["lleg"]]) // Reference : double support phase
                  || (isContact(0) && isContact(1)) ) { // Actual : double support phase
               // Temporarily use first pos damping gain (stikp[0])
               hrp::Vector3 tmp_damping_gain = (1-transition_smooth_gain) * stikp[0].eefm_pos_damping_gain * 10 + transition_smooth_gain * stikp[0].eefm_pos_damping_gain;
-              pos_ctrl = calcDampingControl (ref_f_diff, f_diff, pos_ctrl,
-                                             tmp_damping_gain, stikp[0].eefm_pos_time_const_support);
+              if (!is_hold_compensation) {
+                  pos_ctrl = calcDampingControl (ref_f_diff, f_diff, pos_ctrl,
+                                                 tmp_damping_gain, stikp[0].eefm_pos_time_const_support);
+              }
             } else {
               double remain_swing_time;
               if ( !contact_states[contact_states_index_map["rleg"]] ) { // rleg swing
@@ -1039,7 +1056,9 @@ void Stabilizer::getActualParameters ()
               // Temporarily use first pos damping gain (stikp[0])
               hrp::Vector3 tmp_damping_gain = (1-transition_smooth_gain) * stikp[0].eefm_pos_damping_gain * 10 + transition_smooth_gain * stikp[0].eefm_pos_damping_gain;
               hrp::Vector3 tmp_time_const = (1-tmp_ratio)*eefm_pos_time_const_swing*hrp::Vector3::Ones()+tmp_ratio*stikp[0].eefm_pos_time_const_support;
-              pos_ctrl = calcDampingControl (tmp_ratio * ref_f_diff, tmp_ratio * f_diff, pos_ctrl, tmp_damping_gain, tmp_time_const);
+              if (!is_hold_compensation) {
+                  pos_ctrl = calcDampingControl (tmp_ratio * ref_f_diff, tmp_ratio * f_diff, pos_ctrl, tmp_damping_gain, tmp_time_const);
+              }
             }
           }
           // zctrl = vlimit(zctrl, -0.02, 0.02);
@@ -1371,8 +1390,10 @@ void Stabilizer::moveBasePosRotForBodyRPYControl ()
     // Body rpy control
     //   Basically Equation (1) and (2) in the paper [1]
     hrp::Vector3 ref_root_rpy = hrp::rpyFromRot(target_root_R);
-    for (size_t i = 0; i < 2; i++) {
-        d_rpy[i] = transition_smooth_gain * (eefm_body_attitude_control_gain[i] * (ref_root_rpy(i) - act_base_rpy(i)) - 1/eefm_body_attitude_control_time_const[i] * d_rpy[i]) * dt + d_rpy[i];
+    if (!is_hold_compensation) {
+        for (size_t i = 0; i < 2; i++) {
+            d_rpy[i] = transition_smooth_gain * (eefm_body_attitude_control_gain[i] * (ref_root_rpy(i) - act_base_rpy(i)) - 1/eefm_body_attitude_control_time_const[i] * d_rpy[i]) * dt + d_rpy[i];
+        }
     }
     rats::rotm3times(current_root_R, target_root_R, hrp::rotFromRpy(d_rpy[0], d_rpy[1], 0));
     m_robot->rootLink()->R = current_root_R;

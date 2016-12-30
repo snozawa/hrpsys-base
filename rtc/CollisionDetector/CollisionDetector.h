@@ -140,6 +140,8 @@ class CollisionDetector
   OutPort<TimedDoubleSeq> m_qOut;
   TimedLongSeq m_beepCommand;
   OutPort<TimedLongSeq> m_beepCommandOut;
+  TimedBoolean m_isIdle;
+  OutPort<TimedBoolean> m_isIdleOut;
   
   // </rtc-template>
 
