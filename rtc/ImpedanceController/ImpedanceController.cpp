@@ -343,6 +343,7 @@ RTC::ReturnCode_t ImpedanceController::onExecute(RTC::UniqueId ec_id)
     if (m_qRefIn.isNew()) {
         m_qRefIn.read();
         m_q.tm = m_qRef.tm;
+        m_otdData.tm = m_qRef.tm;
     }
     if ( m_qRef.data.length() ==  m_robot->numJoints() &&
          m_qCurrent.data.length() ==  m_robot->numJoints() ) {
@@ -367,6 +368,12 @@ RTC::ReturnCode_t ImpedanceController::onExecute(RTC::UniqueId ec_id)
             m_robot->joint(i)->q = m_qRef.data[i];
           }
           m_qOut.write();
+          if (ee_map.find("rleg") != ee_map.end() && ee_map.find("lleg") != ee_map.end()) {// if legged robot
+            m_otdData.data[0] = static_cast<double>(ObjectTurnaroundDetector::MODE_MAX_TIME);
+            m_otdData.data[1] = 0;
+            m_otdData.data[2] = 0;
+            m_otdDataOut.write();
+          }
           return RTC_OK;
         }
 
@@ -526,7 +533,6 @@ RTC::ReturnCode_t ImpedanceController::onExecute(RTC::UniqueId ec_id)
 
         if (ee_map.find("rleg") != ee_map.end() && ee_map.find("lleg") != ee_map.end()) {// if legged robot
             calcObjectTurnaroundDetectorState();
-            m_otdData.tm = m_qRef.tm;
             m_otdDataOut.write();
         }
     } else {
