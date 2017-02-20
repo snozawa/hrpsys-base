@@ -268,7 +268,7 @@ RTC::ReturnCode_t ImpedanceController::onInitialize()
     m_q.data.length(dof);
     qrefv.resize(dof);
     loop = 0;
-    m_otdData.data.length(3); // mode, raw, filtered
+    m_otdData.data.length(4); // mode, raw, filtered, dfiltered
 
     return RTC::RTC_OK;
 }
@@ -699,6 +699,7 @@ void ImpedanceController::calcObjectTurnaroundDetectorState()
     m_otdData.data[0] = static_cast<double>(otd->getMode());
     m_otdData.data[1] = otd->getRawWrench();
     m_otdData.data[2] = otd->getFilteredWrench();
+    m_otdData.data[3] = otd->getFilteredDwrench();
     // Revert to org state
     for ( unsigned int i = 0; i < m_robot->numJoints(); i++ ) {
         m_robot->joint(i)->q = org_q[i];
