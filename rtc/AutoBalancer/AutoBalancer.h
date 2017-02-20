@@ -203,6 +203,7 @@ class AutoBalancer
   void getTargetParameters();
   bool solveLimbIKforLimb (ABCIKparam& param, const std::string& limb_name);
   void solveLimbIK();
+  void distributeReferenceZMPToWrenches (const hrp::Vector3& _ref_zmp);
   void startABCparam(const ::OpenHRP::AutoBalancerService::StrSequence& limbs);
   void stopABCparam();
   void waitABCTransition();
