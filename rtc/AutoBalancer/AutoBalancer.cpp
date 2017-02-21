@@ -649,19 +649,18 @@ void AutoBalancer::getTargetParameters()
       }
     }
     //TMP
-    if (control_mode == MODE_IDLE) {
-      {
-          std::map<leg_type, std::string> leg_type_map = gg->get_leg_type_map();
-          for (std::map<std::string, ABCIKparam>::const_iterator it = ikp.begin(); it != ikp.end(); it++) {
-              std::vector<std::string>::const_iterator dst = std::find_if(leg_names.begin(), leg_names.end(), (boost::lambda::_1 == it->first));
-              std::map<leg_type, std::string>::const_iterator dst2 = std::find_if(leg_type_map.begin(), leg_type_map.end(), (&boost::lambda::_1->* &std::map<leg_type, std::string>::value_type::second == it->first));
-              m_limbCOPOffset[contact_states_index_map[it->first]].data.x = default_zmp_offsets.at(dst2->first)(0);
-              m_limbCOPOffset[contact_states_index_map[it->first]].data.y = default_zmp_offsets.at(dst2->first)(1);
-              m_limbCOPOffset[contact_states_index_map[it->first]].data.z = default_zmp_offsets.at(dst2->first)(2);
-          }
-      }
+    for (size_t i = 0; i < ikp.size(); i++) {
+        if (control_mode != MODE_IDLE) {
+            m_limbCOPOffset[i].data.x = transition_interpolator_ratio * default_zmp_offsets[i][0] + (1-transition_interpolator_ratio) * 0;
+            m_limbCOPOffset[i].data.y = transition_interpolator_ratio * default_zmp_offsets[i][1] + (1-transition_interpolator_ratio) * 0;
+            m_limbCOPOffset[i].data.z = transition_interpolator_ratio * default_zmp_offsets[i][2] + (1-transition_interpolator_ratio) * 0;
+        } else {
+            m_limbCOPOffset[i].data.x = 0;
+            m_limbCOPOffset[i].data.y = 0;
+            m_limbCOPOffset[i].data.z = 0;
+        }
     }
-  //
+    //
   if (control_mode != MODE_IDLE) {
     coordinates tmp_fix_coords;
     if (!leg_names_interpolator->isEmpty()) {
