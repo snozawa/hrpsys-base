@@ -990,6 +990,10 @@ public:
                 //double norm_moment_weight = 1e2;
                 //Wmat(i+j*6+3, i+j*6+3) = ee_forcemoment_distribution_weight[j][i+3] * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
                 Wmat(i+j*6+3, i+j*6+3) = ee_forcemoment_distribution_weight[j][i+3] * fz_alpha_vector[j] * limb_gains[j];
+//                 Wmat(i+j*6, i+j*6) = ee_forcemoment_distribution_weight[j][i] * limb_gains[j];
+//                 //double norm_moment_weight = 1e2;
+//                 //Wmat(i+j*6+3, i+j*6+3) = ee_forcemoment_distribution_weight[j][i+3] * (1.0/norm_moment_weight) * fz_alpha_vector[j] * limb_gains[j];
+//                 Wmat(i+j*6+3, i+j*6+3) = ee_forcemoment_distribution_weight[j][i+3] * limb_gains[j];
             }
         }
         if (printp) {
@@ -1007,11 +1011,11 @@ public:
         }
 
         hrp::dvector ret(state_dim);
-        //hrp::dmatrix selection_matrix = hrp::dmatrix::Identity(6,6);
-        hrp::dmatrix selection_matrix = hrp::dmatrix::Zero(3,6);
-        selection_matrix(0,2) = 1.0;
-        selection_matrix(1,3) = 1.0;
-        selection_matrix(2,4) = 1.0;
+        hrp::dmatrix selection_matrix = hrp::dmatrix::Identity(6,6);
+//         hrp::dmatrix selection_matrix = hrp::dmatrix::Zero(3,6);
+//         selection_matrix(0,2) = 1.0;
+//         selection_matrix(1,3) = 1.0;
+//         selection_matrix(2,4) = 1.0;
         {
             hrp::dvector selected_total_wrench = hrp::dvector::Zero(selection_matrix.rows());
             hrp::dmatrix selected_Gmat = hrp::dmatrix::Zero(selection_matrix.rows(), Gmat.cols());
