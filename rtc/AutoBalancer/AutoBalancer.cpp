@@ -632,8 +632,6 @@ void AutoBalancer::getTargetParameters()
   m_robot->rootLink()->R = input_baseRot;
   m_robot->calcForwardKinematics();
   //
-  if (control_mode != MODE_IDLE) {
-    coordinates tmp_fix_coords;
     if (!zmp_offset_interpolator->isEmpty()) {
       double *default_zmp_offsets_output = new double[ikp.size()*3];
       zmp_offset_interpolator->get(default_zmp_offsets_output, true);
@@ -650,6 +648,22 @@ void AutoBalancer::getTargetParameters()
         }
       }
     }
+    //TMP
+    if (control_mode == MODE_IDLE) {
+      {
+          std::map<leg_type, std::string> leg_type_map = gg->get_leg_type_map();
+          for (std::map<std::string, ABCIKparam>::const_iterator it = ikp.begin(); it != ikp.end(); it++) {
+              std::vector<std::string>::const_iterator dst = std::find_if(leg_names.begin(), leg_names.end(), (boost::lambda::_1 == it->first));
+              std::map<leg_type, std::string>::const_iterator dst2 = std::find_if(leg_type_map.begin(), leg_type_map.end(), (&boost::lambda::_1->* &std::map<leg_type, std::string>::value_type::second == it->first));
+              m_limbCOPOffset[contact_states_index_map[it->first]].data.x = default_zmp_offsets.at(dst2->first)(0);
+              m_limbCOPOffset[contact_states_index_map[it->first]].data.y = default_zmp_offsets.at(dst2->first)(1);
+              m_limbCOPOffset[contact_states_index_map[it->first]].data.z = default_zmp_offsets.at(dst2->first)(2);
+          }
+      }
+    }
+  //
+  if (control_mode != MODE_IDLE) {
+    coordinates tmp_fix_coords;
     if (!leg_names_interpolator->isEmpty()) {
         leg_names_interpolator->get(&leg_names_interpolator_ratio, true);
     }else {
@@ -1679,7 +1693,7 @@ bool AutoBalancer::setAutoBalancerParam(const OpenHRP::AutoBalancerService::Auto
   adjust_footstep_transition_time = i_param.adjust_footstep_transition_time;
   if (zmp_offset_interpolator->isEmpty()) {
       zmp_offset_interpolator->clear();
-      zmp_offset_interpolator->go(default_zmp_offsets_array, zmp_transition_time, true);
+      zmp_offset_interpolator->setGoal(default_zmp_offsets_array, zmp_transition_time, true);
   } else {
       std::cerr << "[" << m_profile.instance_name << "]   default_zmp_offsets cannot be set because interpolating." << std::endl;
   }
