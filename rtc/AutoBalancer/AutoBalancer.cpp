@@ -406,7 +406,7 @@ RTC::ReturnCode_t AutoBalancer::onDeactivated(RTC::UniqueId ec_id)
   if (control_mode == MODE_ABC) {
     control_mode = MODE_SYNC_TO_IDLE;
     double tmp_ratio = 0.0;
-    transition_interpolator->go(&tmp_ratio, m_dt, true); // sync in one controller loop
+    transition_interpolator->setGoal(&tmp_ratio, m_dt, true); // sync in one controller loop
   }
   return RTC::RTC_OK;
 }
@@ -1191,7 +1191,7 @@ void AutoBalancer::startABCparam(const OpenHRP::AutoBalancerService::StrSequence
   transition_interpolator->clear();
   transition_interpolator->set(&tmp_ratio);
   tmp_ratio = 1.0;
-  transition_interpolator->go(&tmp_ratio, transition_time, true);
+  transition_interpolator->setGoal(&tmp_ratio, transition_time, true);
   for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
     it->second.is_active = false;
   }
@@ -1213,7 +1213,7 @@ void AutoBalancer::stopABCparam()
   transition_interpolator->clear();
   transition_interpolator->set(&tmp_ratio);
   tmp_ratio = 0.0;
-  transition_interpolator->go(&tmp_ratio, transition_time, true);
+  transition_interpolator->setGoal(&tmp_ratio, transition_time, true);
   control_mode = MODE_SYNC_TO_IDLE;
 }
 
@@ -1736,7 +1736,7 @@ bool AutoBalancer::setAutoBalancerParam(const OpenHRP::AutoBalancerService::Auto
               double tmp_ratio = 0.0;
               leg_names_interpolator->set(&tmp_ratio);
               tmp_ratio = 1.0;
-              leg_names_interpolator->go(&tmp_ratio, 5.0, true);
+              leg_names_interpolator->setGoal(&tmp_ratio, 5.0, true);
               control_mode = MODE_SYNC_TO_ABC;
           }
       }
@@ -2035,7 +2035,7 @@ bool AutoBalancer::adjustFootSteps(const OpenHRP::AutoBalancerService::Footstep&
       double tmp = 0.0;
       adjust_footstep_interpolator->set(&tmp);
       tmp = 1.0;
-      adjust_footstep_interpolator->go(&tmp, adjust_footstep_transition_time, true);
+      adjust_footstep_interpolator->setGoal(&tmp, adjust_footstep_transition_time, true);
   }
   while (!adjust_footstep_interpolator->isEmpty() )
     usleep(1000);
