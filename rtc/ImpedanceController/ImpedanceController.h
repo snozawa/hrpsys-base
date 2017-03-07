@@ -159,12 +159,12 @@ class ImpedanceController
     int transition_count; // negative value when initing and positive value when deleting
     hrp::dvector transition_joint_q;
     hrp::JointPathExPtr manip;
-    bool is_active;
+    bool is_active, is_ik_enable;
 
     ImpedanceParam ()
       : ImpedanceOutputGenerator(),
         ref_force(hrp::Vector3::Zero()), ref_moment(hrp::Vector3::Zero()),
-        sr_gain(1.0), avoid_gain(0.001), reference_gain(0.01), manipulability_limit(0.1), transition_count(0), is_active(false)
+        sr_gain(1.0), avoid_gain(0.001), reference_gain(0.01), manipulability_limit(0.1), transition_count(0), is_active(false), is_ik_enable(true)
     {};
   };
   struct ee_trans {

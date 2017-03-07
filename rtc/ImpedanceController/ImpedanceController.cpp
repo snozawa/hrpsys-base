@@ -519,8 +519,10 @@ RTC::ReturnCode_t ImpedanceController::onExecute(RTC::UniqueId ec_id)
                     hrp::JointPathExPtr manip = param.manip;
                     assert(manip);
                     //const int n = manip->numJoints();
-                    manip->calcInverseKinematics2Loop(param.getOutputPos(), param.getOutputRot(), 1.0, param.avoid_gain, param.reference_gain, &qrefv, 1.0,
-                                                      ee_map[it->first].localPos, ee_map[it->first].localR);
+                    if (param.is_ik_enable) {
+                        manip->calcInverseKinematics2Loop(param.getOutputPos(), param.getOutputRot(), 1.0, param.avoid_gain, param.reference_gain, &qrefv, 1.0,
+                                                          ee_map[it->first].localPos, ee_map[it->first].localR);
+                    }
                     // Set eeTform while is_active mode
                     size_t tmpidx = ee_map[it->first].index*Tform_size;
                     for (size_t eei = 0; eei < 3; eei++) {
@@ -750,6 +752,12 @@ bool ImpedanceController::setImpedanceControllerParam(const std::string& i_name_
         }
         m_impedance_param[name].manip->setOptionalWeightVector(ov);
         use_sh_base_pos_rpy = i_param_.use_sh_base_pos_rpy;
+        bool is_ik_enable_set = false;
+        if ( (m_impedance_param[name].is_ik_enable != i_param_.is_ik_enable) &&
+             !m_impedance_param[name].is_active) {
+            m_impedance_param[name].is_ik_enable = i_param_.is_ik_enable;
+            is_ik_enable_set = true;
+        }
 
         std::cerr << "[" << m_profile.instance_name << "] set parameters" << std::endl;
         std::cerr << "[" << m_profile.instance_name << "]             name : " << name << std::endl;
@@ -762,6 +770,8 @@ bool ImpedanceController::setImpedanceControllerParam(const std::string& i_name_
         std::cerr << "[" << m_profile.instance_name << "]       avoid_gain : " << m_impedance_param[name].avoid_gain << std::endl;
         std::cerr << "[" << m_profile.instance_name << "]   reference_gain : " << m_impedance_param[name].reference_gain << std::endl;
         std::cerr << "[" << m_profile.instance_name << "]   use_sh_base_pos_rpy : " << (use_sh_base_pos_rpy?"true":"false") << std::endl;
+        if (!is_ik_enable_set) std::cerr << "[" << m_profile.instance_name << "]   is_ik_enable cannot be changed in active mode, or not changed." << std::endl;
+        std::cerr << "[" << m_profile.instance_name << "]   is_ik_enable = " << (m_impedance_param[name].is_ik_enable?"true":"false") << std::endl;
     }
     return true;
 }
@@ -792,6 +802,7 @@ void ImpedanceController::copyImpedanceParam (ImpedanceControllerService::impeda
           i_param_.ik_optional_weight_vector[i] = ov[i];
       }
   }
+  i_param_.is_ik_enable = param.is_ik_enable;
 }
 
 void ImpedanceController::updateRootLinkPosRot (TimedOrientation3D tmprpy)

@@ -57,6 +57,8 @@ module OpenHRP
       DblSequence ik_optional_weight_vector;
       /// Use StateHolder basePos and baseRpy?
       boolean use_sh_base_pos_rpy;
+      /// Solve IK in ImpedanceController or not?
+      boolean is_ik_enable;
     };
 
     /**
