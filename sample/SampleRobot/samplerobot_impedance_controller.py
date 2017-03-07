@@ -197,6 +197,56 @@ def demoWorldFrameRefForceCheck ():
     else:
         print >> sys.stderr, "8. World frame ref-force check is not executed in non-kinematics-only-mode"
 
+def demoDisableIK (is_ik_enable = False):
+    # 9. Disable IK
+    print >> sys.stderr, "9. Disable IK"
+    # Stop before test
+    for limb in ["rarm", "larm"]:
+        hcf.ic_svc.stopImpedanceControllerNoWait(limb)
+    for limb in ["rarm", "larm"]:
+        hcf.ic_svc.waitImpedanceControllerTransition(limb)
+    # Set to is_ik_enable=False and start and Set ref force to visualize IMP working
+    hcf.seq_svc.setWrenches([0,0,0,0,0,0,
+                             0,0,0,0,0,0,
+                             0,0,-20,0,0,0,
+                             0,0,-20,0,0,0], 1.0);
+    for limb in ["rarm", "larm"]:
+        [ret, icp]=hcf.ic_svc.getImpedanceControllerParam(limb)
+        icp.is_ik_enable = is_ik_enable
+        hcf.ic_svc.setImpedanceControllerParam(limb, icp)
+        hcf.ic_svc.startImpedanceControllerNoWait(limb)
+    for limb in ["rarm", "larm"]:
+        hcf.ic_svc.waitImpedanceControllerTransition(limb)
+    hcf.seq_svc.waitInterpolation();
+    # Changing is_ik_enable while MODE_IMP is invalid
+    all_value_ret = []
+    for limb in ["rarm", "larm"]:
+        [ret1, icp1]=hcf.ic_svc.getImpedanceControllerParam(limb)
+        icp1.is_ik_enable = True
+        hcf.ic_svc.setImpedanceControllerParam(limb, icp1)
+        [ret2, icp2]=hcf.ic_svc.getImpedanceControllerParam(limb)
+        all_value_ret.append(icp2.is_ik_enable != icp1.is_ik_enable)
+    # Revert : Enable IK
+    hcf.seq_svc.setWrenches([0,0,0,0,0,0,
+                             0,0,0,0,0,0,
+                             0,0,0,0,0,0,
+                             0,0,0,0,0,0], 1.0);
+    for limb in ["rarm", "larm"]:
+        hcf.ic_svc.stopImpedanceControllerNoWait(limb)
+    for limb in ["rarm", "larm"]:
+        hcf.ic_svc.waitImpedanceControllerTransition(limb)
+    for limb in ["rarm", "larm"]:
+        [ret1, icp1]=hcf.ic_svc.getImpedanceControllerParam(limb)
+        icp1.is_ik_enable = True
+        hcf.ic_svc.setImpedanceControllerParam(limb, icp1)
+        [ret2, icp2]=hcf.ic_svc.getImpedanceControllerParam(limb)
+        all_value_ret.append(icp2.is_ik_enable == icp1.is_ik_enable)
+    hcf.seq_svc.waitInterpolation();
+    print >> sys.stderr, "  all_value_ret = ", all_value_ret
+    if all(all_value_ret):
+        print >> sys.stderr, "  DisableIK => OK"
+    else:
+        assert(False)
 
 def demoOCTDCheck ():
     # 1. Object Contact Turnaround Detector set param check
@@ -232,6 +282,7 @@ def demo():
     demoArmTrackingCheck()
     demoWorldFrameCheck()
     demoWorldFrameRefForceCheck()
+    demoDisableIK()
     demoOCTDCheck()
 
 if __name__ == '__main__':
