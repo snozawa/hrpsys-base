@@ -50,6 +50,7 @@ ImpedanceController::ImpedanceController(RTC::Manager* manager)
       m_baseRpyIn("baseRpyIn", m_baseRpy),
       m_rpyIn("rpy", m_rpy),
       m_qOut("q", m_q),
+      m_eeTformsOut("eeTforms", m_eeTforms),
       m_ImpedanceControllerServicePort("ImpedanceControllerService"),
       // </rtc-template>
       m_robot(hrp::BodyPtr()),
@@ -81,6 +82,7 @@ RTC::ReturnCode_t ImpedanceController::onInitialize()
 
     // Set OutPort buffer
     addOutPort("q", m_qOut);
+    addOutPort("eeTforms", m_eeTformsOut);
   
     // Set service provider to Ports
     m_ImpedanceControllerServicePort.registerProvider("service0", "ImpedanceControllerService", m_service0);
@@ -187,6 +189,7 @@ RTC::ReturnCode_t ImpedanceController::onInitialize()
             }
             eet.localR = Eigen::AngleAxis<double>(tmpv[3], hrp::Vector3(tmpv[0], tmpv[1], tmpv[2])).toRotationMatrix(); // rotation in VRML is represented by axis + angle
             eet.target_name = ee_target;
+            eet.index = i;
             ee_map.insert(std::pair<std::string, ee_trans>(ee_name , eet));
             base_name_map.insert(std::pair<std::string, std::string>(ee_name, ee_base));
             std::cerr << "[" << m_profile.instance_name << "] End Effector [" << ee_name << "]" << ee_target << " " << ee_base << std::endl;
@@ -194,6 +197,7 @@ RTC::ReturnCode_t ImpedanceController::onInitialize()
             std::cerr << "[" << m_profile.instance_name << "]   localPos = " << eet.localPos.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", ", ", "", "", "    [", "]")) << "[m]" << std::endl;
             std::cerr << "[" << m_profile.instance_name << "]   localR = " << eet.localR.format(Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", "\n", "    [", "]")) << std::endl;
         }
+        m_eeTforms.data.length(num*Tform_size);
     }
 
     // initialize impedance params
@@ -337,6 +341,7 @@ RTC::ReturnCode_t ImpedanceController::onExecute(RTC::UniqueId ec_id)
     if (m_qRefIn.isNew()) {
         m_qRefIn.read();
         m_q.tm = m_qRef.tm;
+        m_eeTforms.tm = m_qRef.tm;
     }
     if ( m_qRef.data.length() ==  m_robot->numJoints() &&
          m_qCurrent.data.length() ==  m_robot->numJoints() ) {
@@ -350,19 +355,6 @@ RTC::ReturnCode_t ImpedanceController::onExecute(RTC::UniqueId ec_id)
         }
 
         Guard guard(m_mutex);
-
-        bool is_active = false;
-        for ( std::map<std::string, ImpedanceParam>::iterator it = m_impedance_param.begin(); it != m_impedance_param.end(); it++ ) {
-            is_active = is_active || it->second.is_active;
-        }
-        if ( !is_active ) {
-          for ( unsigned int i = 0; i < m_qRef.data.length(); i++ ){
-            m_q.data[i] = m_qRef.data[i];
-            m_robot->joint(i)->q = m_qRef.data[i];
-          }
-          m_qOut.write();
-          return RTC_OK;
-        }
 
 	{
 	  hrp::dvector qorg(m_robot->numJoints());
@@ -425,6 +417,14 @@ RTC::ReturnCode_t ImpedanceController::onExecute(RTC::UniqueId ec_id)
             param.target_p0 = m_robot->link(target_name)->p + m_robot->link(target_name)->R * ee_map[it->first].localPos;
             param.target_r0 = m_robot->link(target_name)->R * ee_map[it->first].localR;
             if (param.transition_count == -MAX_TRANSITION_COUNT) param.resetPreviousTargetParam();
+            // Set eeTform by sequencer pos and rot for non-is_active mode
+            size_t tmpidx = ee_map[it->first].index*Tform_size;
+            for (size_t eei = 0; eei < 3; eei++) {
+                m_eeTforms.data[tmpidx+eei] = param.target_p0(eei);
+                for (size_t eej = 0; eej < 3; eej++) {
+                    m_eeTforms.data[tmpidx+3*eei+eej] = param.target_r0(eei, eej);
+                }
+            }
           }
           // back to impedance robot model (only for controlled joint)
 	  for ( std::map<std::string, ImpedanceParam>::iterator it = m_impedance_param.begin(); it != m_impedance_param.end(); it++ ) {
@@ -440,6 +440,20 @@ RTC::ReturnCode_t ImpedanceController::onExecute(RTC::UniqueId ec_id)
 
 	}
 
+        bool is_active = false;
+        for ( std::map<std::string, ImpedanceParam>::iterator it = m_impedance_param.begin(); it != m_impedance_param.end(); it++ ) {
+            is_active = is_active || it->second.is_active;
+        }
+        if ( !is_active ) {
+          for ( unsigned int i = 0; i < m_qRef.data.length(); i++ ){
+            m_q.data[i] = m_qRef.data[i];
+            m_robot->joint(i)->q = m_qRef.data[i];
+          }
+          m_qOut.write();
+          m_eeTformsOut.write();
+          return RTC_OK;
+        }
+
 	// set m_robot to qRef when deleting status
         std::map<std::string, ImpedanceParam>::iterator it = m_impedance_param.begin();
 	while(it != m_impedance_param.end()){
@@ -454,14 +468,26 @@ RTC::ReturnCode_t ImpedanceController::onExecute(RTC::UniqueId ec_id)
                 }
                 if ( param.transition_count > 0 ) {
                     hrp::JointPathExPtr manip = param.manip;
+                    // transition_smooth_gain moves from 0 to 1
+                    // (/ (log (/ (- 1 0.99) 0.99)) 0.5)
+                    double transition_smooth_gain = 1/(1+exp(-9.19*((static_cast<double>(MAX_TRANSITION_COUNT - param.transition_count) / MAX_TRANSITION_COUNT) - 0.5)));
                     for ( unsigned int j = 0; j < manip->numJoints(); j++ ) {
                         int i = manip->joint(j)->jointId; // index in robot model
                         hrp::Link* joint =  m_robot->joint(i);
-                        // transition_smooth_gain moves from 0 to 1
-                        // (/ (log (/ (- 1 0.99) 0.99)) 0.5)
-                        double transition_smooth_gain = 1/(1+exp(-9.19*((static_cast<double>(MAX_TRANSITION_COUNT - param.transition_count) / MAX_TRANSITION_COUNT) - 0.5)));
                         joint->q = ( m_qRef.data[i] - param.transition_joint_q[i] ) * transition_smooth_gain + param.transition_joint_q[i];
                     }
+                    // Set eeTform for transition to non-is_active mode
+                    size_t tmpidx = ee_map[it->first].index*Tform_size;
+                    hrp::Vector3 tmpPos = (param.target_p0-param.getOutputPos()) * transition_smooth_gain + param.getOutputPos();
+                    hrp::Matrix33 tmpR;
+                    rats::mid_rot(tmpR, transition_smooth_gain, param.getOutputRot(), param.target_r0);
+                    for (size_t eei = 0; eei < 3; eei++) {
+                        m_eeTforms.data[tmpidx+eei] = tmpPos(eei);
+                        for (size_t eej = 0; eej < 3; eej++) {
+                            m_eeTforms.data[tmpidx+3*eei+eej] = tmpR(eei, eej);
+                        }
+                    }
+                    // transition_count update
                     param.transition_count--;
                     if(param.transition_count <= 0){ // erase impedance param
                         std::cerr << "[" << m_profile.instance_name << "] Finished cleanup and erase impedance param " << it->first << std::endl;
@@ -495,7 +521,15 @@ RTC::ReturnCode_t ImpedanceController::onExecute(RTC::UniqueId ec_id)
                     //const int n = manip->numJoints();
                     manip->calcInverseKinematics2Loop(param.getOutputPos(), param.getOutputRot(), 1.0, param.avoid_gain, param.reference_gain, &qrefv, 1.0,
                                                       ee_map[it->first].localPos, ee_map[it->first].localR);
-
+                    // Set eeTform while is_active mode
+                    size_t tmpidx = ee_map[it->first].index*Tform_size;
+                    for (size_t eei = 0; eei < 3; eei++) {
+                        m_eeTforms.data[tmpidx+eei] = param.getOutputPos()[eei];
+                        for (size_t eej = 0; eej < 3; eej++) {
+                            m_eeTforms.data[tmpidx+3*eei+eej] = param.getOutputRot()(eei, eej);
+                        }
+                    }
+                    // transition_count update
                     if ( param.transition_count < 0 ) {
                         param.transition_count++;
                     }
@@ -516,6 +550,7 @@ RTC::ReturnCode_t ImpedanceController::onExecute(RTC::UniqueId ec_id)
                 }
                 std::cerr << std::endl;
             }
+            m_eeTformsOut.write();
         }
     } else {
         if ( DEBUGP || loop % 100 == 0 ) {

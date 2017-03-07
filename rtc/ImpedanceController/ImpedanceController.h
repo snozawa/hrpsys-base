@@ -128,6 +128,8 @@ class ImpedanceController
   // <rtc-template block="outport_declare">
   TimedDoubleSeq m_q;
   OutPort<TimedDoubleSeq> m_qOut;
+  TimedDoubleSeq m_eeTforms;
+  OutPort<TimedDoubleSeq> m_eeTformsOut;
   
   // </rtc-template>
 
@@ -169,6 +171,7 @@ class ImpedanceController
     std::string target_name;
     hrp::Vector3 localPos;
     hrp::Matrix33 localR;
+    size_t index;
   };
 
   void copyImpedanceParam (OpenHRP::ImpedanceControllerService::impedanceParam& i_param_, const ImpedanceParam& param);
@@ -187,6 +190,7 @@ class ImpedanceController
   int dummy;
   int loop;
   bool use_sh_base_pos_rpy;
+  static const size_t Tform_size = 12; // pos 3 + rot 3x3
 };
 
 
