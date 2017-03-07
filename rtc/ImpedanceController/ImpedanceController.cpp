@@ -17,6 +17,7 @@
 #include <hrpUtil/MatrixSolvers.h>
 #include "hrpsys/util/Hrpsys.h"
 #include <boost/assign.hpp>
+#include <Eigen/Core>
 
 #define MAX_TRANSITION_COUNT (static_cast<int>(2/m_dt))
 typedef coil::Guard<coil::Mutex> Guard;
@@ -519,12 +520,9 @@ void ImpedanceController::getTargetParameters ()
         if (param.transition_count == -MAX_TRANSITION_COUNT) param.resetPreviousTargetParam();
         // Set eeTform by sequencer pos and rot for non-is_active mode
         size_t tmpidx = ee_map[it->first].index*Tform_size;
-        for (size_t eei = 0; eei < 3; eei++) {
-            m_eeTforms.data[tmpidx+eei] = param.target_p0(eei);
-            for (size_t eej = 0; eej < 3; eej++) {
-                m_eeTforms.data[tmpidx+3*eei+eej] = param.target_r0(eei, eej);
-            }
-        }
+        Eigen::Map<hrp::Vector3>((m_eeTforms.data.get_buffer()+tmpidx), param.target_p0.rows(), param.target_p0.cols()) = param.target_p0;
+        double *tform_arr = m_eeTforms.data.get_buffer();
+        hrp::setMatrix33ToRowMajorArray(param.target_r0, tform_arr, (tmpidx+3));
     }
 };
 
@@ -612,12 +610,9 @@ void ImpedanceController::calcImpedanceControl ()
                 hrp::Vector3 tmpPos = (param.target_p0-param.getOutputPos()) * transition_smooth_gain + param.getOutputPos();
                 hrp::Matrix33 tmpR;
                 rats::mid_rot(tmpR, transition_smooth_gain, param.getOutputRot(), param.target_r0);
-                for (size_t eei = 0; eei < 3; eei++) {
-                    m_eeTforms.data[tmpidx+eei] = tmpPos(eei);
-                    for (size_t eej = 0; eej < 3; eej++) {
-                        m_eeTforms.data[tmpidx+3*eei+eej] = tmpR(eei, eej);
-                    }
-                }
+                Eigen::Map<hrp::Vector3>((m_eeTforms.data.get_buffer()+tmpidx), tmpPos.rows(), tmpPos.cols()) = tmpPos;
+                double *tform_arr = m_eeTforms.data.get_buffer();
+                hrp::setMatrix33ToRowMajorArray(tmpR, tform_arr, (tmpidx+3));
                 // transition_count update
                 param.transition_count--;
                 if(param.transition_count <= 0){ // erase impedance param
@@ -656,12 +651,9 @@ void ImpedanceController::calcImpedanceControl ()
                 }
                 // Set eeTform while is_active mode
                 size_t tmpidx = ee_map[it->first].index*Tform_size;
-                for (size_t eei = 0; eei < 3; eei++) {
-                    m_eeTforms.data[tmpidx+eei] = param.getOutputPos()[eei];
-                    for (size_t eej = 0; eej < 3; eej++) {
-                        m_eeTforms.data[tmpidx+3*eei+eej] = param.getOutputRot()(eei, eej);
-                    }
-                }
+                Eigen::Map<hrp::Vector3>((m_eeTforms.data.get_buffer()+tmpidx), param.getOutputPos().rows(), param.getOutputPos().cols()) = param.getOutputPos();
+                double *tform_arr = m_eeTforms.data.get_buffer();
+                hrp::setMatrix33ToRowMajorArray(param.getOutputRot(), tform_arr, (tmpidx+3));
                 // transition_count update
                 if ( param.transition_count < 0 ) {
                     param.transition_count++;
