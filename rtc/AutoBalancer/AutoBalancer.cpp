@@ -60,6 +60,7 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_zmpIn("zmpIn", m_zmp),
       m_optionalDataIn("optionalData", m_optionalData),
       m_emergencySignalIn("emergencySignal", m_emergencySignal),
+      m_eeTformsIn("eeTformsIn", m_eeTforms),
       m_qOut("q", m_qRef),
       m_zmpOut("zmpOut", m_zmp),
       m_basePosOut("basePosOut", m_basePos),
@@ -102,6 +103,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addInPort("zmpIn", m_zmpIn);
     addInPort("optionalData", m_optionalDataIn);
     addInPort("emergencySignal", m_emergencySignalIn);
+    addInPort("eeTforms", m_eeTformsIn);
 
     // Set OutPort buffer
     addOutPort("q", m_qOut);
@@ -225,6 +227,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
       m_controlSwingSupportTime.data.length(num);
       for (size_t i = 0; i < num; i++) m_controlSwingSupportTime.data[i] = 0.0;
       for (size_t i = 0; i < num; i++) m_toeheelRatio.data[i] = rats::no_using_toe_heel_ratio;
+      m_eeTforms.data.length(num*Tform_size);
     }
     std::vector<hrp::Vector3> leg_pos;
     if (leg_offset_str.size() > 0) {
@@ -466,6 +469,9 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
         //     is_stop_mode = true;
         //     gg->emergency_stop();
         // }
+    }
+    if (m_eeTformsIn.isNew()){
+        m_eeTformsIn.read();
     }
 
     Guard guard(m_mutex);
@@ -780,6 +786,18 @@ void AutoBalancer::getTargetParameters()
         rats::mid_coords(fix_leg_coords, 0.5, tmprc, tmplc);
         tmp_fix_coords = fix_leg_coords;
     }
+    // Get EE
+    std::map<std::string, hrp::Vector3> target_ee_pos_map;
+    std::map<std::string, hrp::Matrix33> target_ee_rot_map;
+    for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+        size_t tmpidx = contact_states_index_map[it->first]*Tform_size;
+        hrp::Vector3 tmpPos = Eigen::Map<hrp::Vector3>((m_eeTforms.data.get_buffer()+tmpidx));
+        hrp::Matrix33 tmpR;
+        double *tform_arr = m_eeTforms.data.get_buffer();
+        hrp::getMatrix33FromRowMajorArray(tmpR, tform_arr, (tmpidx+3));
+        target_ee_pos_map.insert(std::pair<std::string, hrp::Vector3>(it->first, tmpPos));
+        target_ee_rot_map.insert(std::pair<std::string, hrp::Matrix33>(it->first, tmpR));
+    }
     // Tempolarily modify tmp_fix_coords
     // This will be removed after seq outputs adequate waistRPY discussed in https://github.com/fkanehiro/hrpsys-base/issues/272
     {
@@ -795,6 +813,31 @@ void AutoBalancer::getTargetParameters()
     }
     // Fix pos
     fixLegToCoords(tmp_fix_coords.pos, tmp_fix_coords.rot);
+    // fix leg
+    {
+        // get current foot mid pos + rot
+        std::vector<coordinates> foot_coords;
+        for (size_t i = 0; i < leg_names.size(); i++) {
+            if (leg_names[i].find("leg") != std::string::npos) foot_coords.push_back(coordinates(target_ee_pos_map[leg_names[i]], target_ee_rot_map[leg_names[i]]));
+        }
+        coordinates current_foot_mid_coords;
+        multi_mid_coords(current_foot_mid_coords, foot_coords);
+        hrp::Vector3 current_foot_mid_pos = current_foot_mid_coords.pos;
+        hrp::Matrix33 current_foot_mid_rot = current_foot_mid_coords.rot;
+        // target : Rt, pt
+        // target's fix : Rtf, ptf
+        // fix : Rf, pf
+        // new : Rn, pn
+        // Rn = Rf (Rtf^T Rt), pn = pf + Rf Rtf^T (pt-ptf)
+        // fix ee pos + pos to fix "coords" = "current_foot_mid_xx"
+        hrp::Matrix33 tmpR (tmp_fix_coords.rot * current_foot_mid_rot.transpose());
+        for ( std::map<std::string, hrp::Vector3>::iterator it = target_ee_pos_map.begin(); it != target_ee_pos_map.end(); it++ ) {
+            it->second = tmp_fix_coords.pos + tmpR * (it->second - current_foot_mid_pos);
+        }
+        for ( std::map<std::string, hrp::Matrix33>::iterator it = target_ee_rot_map.begin(); it != target_ee_rot_map.end(); it++ ) {
+            rats::rotm3times(it->second, tmpR, it->second);
+        }
+    }
 
     /* update ref_forces ;; sp's absolute -> rmc's absolute */
     for (size_t i = 0; i < m_ref_forceIn.size(); i++) {
@@ -817,8 +860,8 @@ void AutoBalancer::getTargetParameters()
     target_root_R = m_robot->rootLink()->R;
     for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
       if ( control_mode == MODE_IDLE || std::find(leg_names.begin(), leg_names.end(), it->first) == leg_names.end() ) {
-        it->second.target_p0 = it->second.target_link->p;
-        it->second.target_r0 = it->second.target_link->R;
+        it->second.target_p0 = target_ee_pos_map[it->first];
+        it->second.target_r0 = target_ee_rot_map[it->first];
       }
     }
     // Just for ik initial value
@@ -827,8 +870,8 @@ void AutoBalancer::getTargetParameters()
         current_root_R = target_root_R;
         for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
             if ( std::find(leg_names.begin(), leg_names.end(), it->first) != leg_names.end() ) {
-                it->second.target_p0 = it->second.target_link->p;
-                it->second.target_r0 = it->second.target_link->R;
+                it->second.target_p0 = target_ee_pos_map[it->first];
+                it->second.target_r0 = target_ee_rot_map[it->first];
             }
         }
     }

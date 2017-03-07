@@ -135,6 +135,8 @@ class AutoBalancer
   std::vector<InPort<TimedDoubleSeq> *> m_ref_forceIn;
   TimedLong m_emergencySignal;
   InPort<TimedLong> m_emergencySignalIn;
+  TimedDoubleSeq m_eeTforms;
+  InPort<TimedDoubleSeq> m_eeTformsIn;
   // for debug
   TimedPoint3D m_cog;
   
@@ -263,6 +265,7 @@ class AutoBalancer
   hrp::Vector3 graspless_manip_p_gain;
   rats::coordinates graspless_manip_reference_trans_coords;
   double pos_ik_thre, rot_ik_thre;
+  static const size_t Tform_size = 12; // pos 3 + rot 3x3
 };
 
 
