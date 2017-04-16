@@ -51,6 +51,8 @@ module OpenHRP
       double reference_gain;
       /// Manipulability limit for inverse kinematics.
       double manipulability_limit;
+      /// Gain for IK weight to avoid joint limit. If avoid_weight_gain = 0.0, do not change IK weight near joint limits. If avoid_weight_gain = 1.0 (by default), change IK weight near joint limits.
+      double avoid_weight_gain;
       /// Controller mode.
       ControllerMode controller_mode;
       /// Joint weight for Inverse Kinematics calculation

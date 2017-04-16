@@ -228,6 +228,7 @@ public:
             ilp.avoid_gain = param.avoid_gain;
             ilp.reference_gain = param.reference_gain;
             ilp.manipulability_limit = param.manip->getManipulabilityLimit();
+            ilp.avoid_weight_gain = param.manip->getAvoidWeightGain();
         }
     };
     // Set IKparam
@@ -257,6 +258,7 @@ public:
                     param.avoid_gain = ilp.avoid_gain;
                     param.reference_gain = ilp.reference_gain;
                     param.manip->setManipulabilityLimit(ilp.manipulability_limit);
+                    param.manip->setAvoidWeightGain(ilp.avoid_weight_gain);
                 }
             } else {
                 std::cerr << "[" << print_str << "]   ik_optional_weight_vector invalid length! Cannot be set. (input = [";
@@ -314,6 +316,11 @@ public:
       std::cerr << "[" << print_str << "]   manipulability_limits = [";
       for (size_t i = 0; i < ee_vec.size(); i++) {
           std::cerr << ikp[ee_vec[i]].manip->getManipulabilityLimit() << ", ";
+      }
+      std::cerr << "]" << std::endl;
+      std::cerr << "[" << print_str << "]   avoid_weight_gain = [";
+      for (size_t i = 0; i < ee_vec.size(); i++) {
+          std::cerr << ikp[ee_vec[i]].manip->getAvoidWeightGain() << ", ";
       }
       std::cerr << "]" << std::endl;
     };

@@ -1953,6 +1953,7 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
       ilp.avoid_gain = stikp[i].avoid_gain;
       ilp.reference_gain = stikp[i].reference_gain;
       ilp.manipulability_limit = jpe_v[i]->getManipulabilityLimit();
+      ilp.avoid_weight_gain = jpe_v[i]->getAvoidWeightGain();
   }
 };
 
@@ -2200,6 +2201,7 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
               stikp[i].avoid_gain = ilp.avoid_gain;
               stikp[i].reference_gain = ilp.reference_gain;
               jpe_v[i]->setManipulabilityLimit(ilp.manipulability_limit);
+              jpe_v[i]->setAvoidWeightGain(ilp.avoid_weight_gain);
           }
       } else {
           std::cerr << "[" << m_profile.instance_name << "]   ik_optional_weight_vector invalid length! Cannot be set. (input = [";
@@ -2244,6 +2246,11 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
       std::cerr << "[" << m_profile.instance_name << "]   manipulability_limits = [";
       for (size_t i = 0; i < jpe_v.size(); i++) {
           std::cerr << jpe_v[i]->getManipulabilityLimit() << ", ";
+      }
+      std::cerr << "]" << std::endl;
+      std::cerr << "[" << m_profile.instance_name << "]   avoid_weight_gain = [";
+      for (size_t i = 0; i < jpe_v.size(); i++) {
+          std::cerr << jpe_v[i]->getAvoidWeightGain() << ", ";
       }
       std::cerr << "]" << std::endl;
   }

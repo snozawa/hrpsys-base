@@ -712,6 +712,7 @@ bool ImpedanceController::setImpedanceControllerParam(const std::string& i_name_
         m_impedance_param[name].manipulability_limit = i_param_.manipulability_limit;
         m_impedance_param[name].manip->setSRGain(m_impedance_param[name].sr_gain);
         m_impedance_param[name].manip->setManipulabilityLimit(m_impedance_param[name].manipulability_limit);
+        m_impedance_param[name].manip->setAvoidWeightGain(i_param_.avoid_weight_gain);
 
         m_impedance_param[name].M_p = i_param_.M_p;
         m_impedance_param[name].D_p = i_param_.D_p;
@@ -741,6 +742,7 @@ bool ImpedanceController::setImpedanceControllerParam(const std::string& i_name_
         std::cerr << "[" << m_profile.instance_name << "]          sr_gain : " << m_impedance_param[name].sr_gain << std::endl;
         std::cerr << "[" << m_profile.instance_name << "]       avoid_gain : " << m_impedance_param[name].avoid_gain << std::endl;
         std::cerr << "[" << m_profile.instance_name << "]   reference_gain : " << m_impedance_param[name].reference_gain << std::endl;
+        std::cerr << "[" << m_profile.instance_name << "] avoid_weight_gain: " << m_impedance_param[name].manip->getAvoidWeightGain() << std::endl;
         std::cerr << "[" << m_profile.instance_name << "]   use_sh_base_pos_rpy : " << (use_sh_base_pos_rpy?"true":"false") << std::endl;
     }
     return true;
@@ -790,10 +792,12 @@ bool ImpedanceController::getImpedanceControllerParam(const std::string& i_name_
         std::cerr << "[" << m_profile.instance_name << "] Could not found impedance controller param [" << i_name_ << "]" << std::endl;
         // if impedance param of i_name_ is not found, return default impedance parameter ;; default parameter is specified ImpedanceParam struct's default constructer
         copyImpedanceParam(i_param_, ImpedanceParam());
+        i_param_.avoid_weight_gain = 1.0;
         i_param_.use_sh_base_pos_rpy = use_sh_base_pos_rpy;
         return false;
     }
     copyImpedanceParam(i_param_, m_impedance_param[i_name_]);
+    i_param_.avoid_weight_gain = m_impedance_param[i_name_].manip->getAvoidWeightGain();
     i_param_.use_sh_base_pos_rpy = use_sh_base_pos_rpy;
     return true;
 }
