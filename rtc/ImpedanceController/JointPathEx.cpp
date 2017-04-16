@@ -94,7 +94,7 @@ JointPathEx::JointPathEx(BodyPtr& robot, Link* base, Link* end, double control_c
   for (unsigned int i = 0 ; i < numJoints(); i++ ) {
     joints.push_back(joint(i));
   }
-  avoid_weight_gain.resize(numJoints());
+  joint_angle_limit_weight_old.resize(numJoints());
   optional_weight_vector.resize(numJoints());
   for (unsigned int i = 0 ; i < numJoints(); i++ ) {
       optional_weight_vector[i] = 1.0;
@@ -193,7 +193,7 @@ bool JointPathEx::calcJacobianInverseNullspace(dmatrix &J, dmatrix &Jinv, dmatri
 
         // If use_inside_joint_weight_retrieval = true (true by default), use T. F. Chang and R.-V. Dubeby weight retrieval inward.
         // Otherwise, joint weight is always calculated from limit value to resolve https://github.com/fkanehiro/hrpsys-base/issues/516.
-        if (( r - avoid_weight_gain[j] ) >= 0 ) {
+        if (( r - joint_angle_limit_weight_old[j] ) >= 0 ) {
 	  w(j, j) = optional_weight_vector[j] * ( 1.0 / ( 1.0 + r) );
 	} else {
             if (use_inside_joint_weight_retrieval)
@@ -201,11 +201,11 @@ bool JointPathEx::calcJacobianInverseNullspace(dmatrix &J, dmatrix &Jinv, dmatri
             else
                 w(j, j) = optional_weight_vector[j] * ( 1.0 / ( 1.0 + r) );
 	}
-        avoid_weight_gain[j] = r;
+        joint_angle_limit_weight_old[j] = r;
     }
     if ( DEBUG ) {
         std::cerr << " cost :";
-        for(int j = 0; j < n; j++ ) { std::cerr << std::setw(8) << std::setiosflags(std::ios::fixed) << std::setprecision(4) << avoid_weight_gain[j]; }
+        for(int j = 0; j < n; j++ ) { std::cerr << std::setw(8) << std::setiosflags(std::ios::fixed) << std::setprecision(4) << joint_angle_limit_weight_old[j]; }
         std::cerr << std::endl;
         std::cerr << " optw :";
         for(int j = 0; j < n; j++ ) { std::cerr << std::setw(8) << std::setiosflags(std::ios::fixed) << std::setprecision(4) << optional_weight_vector[j]; }
@@ -496,7 +496,7 @@ bool JointPathEx::calcInverseKinematics2(const Vector3& end_p, const Matrix33& e
 
     for(int i=0; i < n; ++i){
         qorg[i] = joints[i]->q;
-        avoid_weight_gain[i] = 100000000000000000000.0;
+        joint_angle_limit_weight_old[i] = 100000000000000000000.0;
     }
 
     

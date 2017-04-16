@@ -50,7 +50,7 @@ namespace hrp {
         double maxIKPosErrorSqr, maxIKRotErrorSqr;
         int maxIKIteration;
         std::vector<Link*> joints;
-        std::vector<double> avoid_weight_gain, optional_weight_vector;
+        std::vector<double> joint_angle_limit_weight_old, optional_weight_vector;
         // Interlocking joint pairs
         //  pair = [index of joint1, index of joint2], index is considered as index for "joints[index]"
         //  Joint angles of joint1 and joint2 has relathionships.
