@@ -87,7 +87,7 @@ Vector3 omegaFromRotEx(const Matrix33& r)
 }
 
 JointPathEx::JointPathEx(BodyPtr& robot, Link* base, Link* end, double control_cycle, bool _use_inside_joint_weight_retrieval, const std::string& _debug_print_prefix)
-    : JointPath(base, end), maxIKPosErrorSqr(1.0e-8), maxIKRotErrorSqr(1.0e-6), maxIKIteration(50), interlocking_joint_pair_indices(), sr_gain(1.0), manipulability_limit(0.1), manipulability_gain(0.001), dt(control_cycle),
+    : JointPath(base, end), maxIKPosErrorSqr(1.0e-8), maxIKRotErrorSqr(1.0e-6), maxIKIteration(50), interlocking_joint_pair_indices(), sr_gain(1.0), manipulability_limit(0.1), manipulability_gain(0.001), avoid_weight_gain(1.0), dt(control_cycle),
       debug_print_prefix(_debug_print_prefix+",JointPathEx"), joint_limit_debug_print_counts(numJoints(), 0),
       debug_print_freq_count(static_cast<size_t>(0.25/dt)), // once per 0.25[s]
       use_inside_joint_weight_retrieval(_use_inside_joint_weight_retrieval) {
@@ -190,6 +190,7 @@ bool JointPathEx::calcJacobianInverseNullspace(dmatrix &J, dmatrix &Jinv, dmatri
                       (4 * pow((jmax - jang),2) * pow((jang - jmin),2)) );
             if (isnan(r)) r = 0;
         }
+        r *= avoid_weight_gain;
 
         // If use_inside_joint_weight_retrieval = true (true by default), use T. F. Chang and R.-V. Dubeby weight retrieval inward.
         // Otherwise, joint weight is always calculated from limit value to resolve https://github.com/fkanehiro/hrpsys-base/issues/516.

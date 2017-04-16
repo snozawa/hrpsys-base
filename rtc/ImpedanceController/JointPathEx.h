@@ -46,6 +46,8 @@ namespace hrp {
             _opt_w[i] = optional_weight_vector[i];
         }
     };
+    void setAvoidWeightGain (const double g) { avoid_weight_gain = g; };
+    double getAvoidWeightGain () const { return avoid_weight_gain; };
   protected:
         double maxIKPosErrorSqr, maxIKRotErrorSqr;
         int maxIKIteration;
@@ -56,7 +58,7 @@ namespace hrp {
         //  Joint angles of joint1 and joint2 has relathionships.
         //  Currently joint1 = joint2 is assumed.
         std::vector<std::pair<size_t, size_t> > interlocking_joint_pair_indices;
-        double sr_gain, manipulability_limit, manipulability_gain, dt;
+        double sr_gain, manipulability_limit, manipulability_gain, avoid_weight_gain, dt;
         std::string debug_print_prefix;
         // Print message Hz management
         std::vector<size_t> joint_limit_debug_print_counts;
