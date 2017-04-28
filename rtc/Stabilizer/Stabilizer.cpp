@@ -834,6 +834,9 @@ void Stabilizer::getActualParameters ()
       hrp::Vector3 _act_ee_p = target->p + target->R * stikp[i].localp;
       act_ee_p[i] = foot_origin_rot.transpose() * (_act_ee_p - foot_origin_pos);
       act_ee_R[i] = foot_origin_rot.transpose() * (target->R * stikp[i].localR);
+      //
+      stikp[i].target_ee_diff_p -= foot_origin_rot.transpose() * (target->p + target->R * stikp[i].localp - foot_origin_pos);
+      stikp[i].target_ee_diff_r = (foot_origin_rot.transpose() * target->R * stikp[i].localR).transpose() * stikp[i].target_ee_diff_r;
     }
     // capture point
     act_cp = act_cog + act_cogvel / std::sqrt(eefm_gravitational_acceleration / (act_cog - act_zmp)(2));
@@ -1495,27 +1498,27 @@ void Stabilizer::calcEEForceMomentControl() {
       //   joint angle : current control output
       //   root pos : target root p
       //   root rot : actual root rot
-      {
-          // Calc status
-          m_robot->rootLink()->R = target_root_R;
-          m_robot->rootLink()->p = target_root_p;
-          m_robot->calcForwardKinematics();
-          hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
-          hrp::Matrix33 senR = sen->link->R * sen->localR;
-          hrp::Matrix33 act_Rs(hrp::rotFromRpy(m_rpy.data.r, m_rpy.data.p, m_rpy.data.y));
-          m_robot->rootLink()->R = act_Rs * (senR.transpose() * m_robot->rootLink()->R);
-          m_robot->calcForwardKinematics();
-          hrp::Vector3 foot_origin_pos;
-          hrp::Matrix33 foot_origin_rot;
-          calcFootOriginCoords (foot_origin_pos, foot_origin_rot);
-          // Calculate foot_origin_coords-relative ee pos and rot
-          // Subtract them from target_ee_diff_xx
-          for (size_t i = 0; i < stikp.size(); i++) {
-              hrp::Link* target = m_robot->link(stikp[i].target_name);
-              stikp[i].target_ee_diff_p -= foot_origin_rot.transpose() * (target->p + target->R * stikp[i].localp - foot_origin_pos);
-              stikp[i].target_ee_diff_r = (foot_origin_rot.transpose() * target->R * stikp[i].localR).transpose() * stikp[i].target_ee_diff_r;
-          }
-      }
+      // {
+      //     // Calc status
+      //     m_robot->rootLink()->R = target_root_R;
+      //     m_robot->rootLink()->p = target_root_p;
+      //     m_robot->calcForwardKinematics();
+      //     hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
+      //     hrp::Matrix33 senR = sen->link->R * sen->localR;
+      //     hrp::Matrix33 act_Rs(hrp::rotFromRpy(m_rpy.data.r, m_rpy.data.p, m_rpy.data.y));
+      //     m_robot->rootLink()->R = act_Rs * (senR.transpose() * m_robot->rootLink()->R);
+      //     m_robot->calcForwardKinematics();
+      //     hrp::Vector3 foot_origin_pos;
+      //     hrp::Matrix33 foot_origin_rot;
+      //     calcFootOriginCoords (foot_origin_pos, foot_origin_rot);
+      //     // Calculate foot_origin_coords-relative ee pos and rot
+      //     // Subtract them from target_ee_diff_xx
+      //     for (size_t i = 0; i < stikp.size(); i++) {
+      //         hrp::Link* target = m_robot->link(stikp[i].target_name);
+      //         stikp[i].target_ee_diff_p -= foot_origin_rot.transpose() * (target->p + target->R * stikp[i].localp - foot_origin_pos);
+      //         stikp[i].target_ee_diff_r = (foot_origin_rot.transpose() * target->R * stikp[i].localR).transpose() * stikp[i].target_ee_diff_r;
+      //     }
+      // }
 
       // State calculation for control : calculate "current" state
       //   joint angle : current control output
@@ -1583,7 +1586,8 @@ void Stabilizer::calcSwingEEModification ()
         // Calc compensation values
         double limit_pos = 30 * 1e-3; // 30[mm] limit
         double limit_rot = deg2rad(10); // 10[deg] limit
-        if (ref_contact_states[contact_states_index_map[stikp[i].ee_name]] || act_contact_states[contact_states_index_map[stikp[i].ee_name]]) {
+        if (ref_contact_states[contact_states_index_map[stikp[i].ee_name]] || act_contact_states[contact_states_index_map[stikp[i].ee_name]] ||
+            ( !ref_contact_states[contact_states_index_map[stikp[i].ee_name]] && (m_controlSwingSupportTime.data[i] > 0.4))) {
             // If actual contact or target contact is ON, do not use swing ee compensation. Exponential zero retrieving.
             stikp[i].d_rpy_swing = calcDampingControl(stikp[i].d_rpy_swing, stikp[i].eefm_swing_rot_time_const);
             stikp[i].d_pos_swing = calcDampingControl(stikp[i].d_pos_swing, stikp[i].eefm_swing_pos_time_const);
