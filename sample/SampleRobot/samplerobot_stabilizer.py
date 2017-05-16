@@ -46,11 +46,13 @@ def calcCOP ():
 def demoGetParameter():
     print >> sys.stderr, "1. getParameter"
     stp = hcf.st_svc.getParameter()
-    print >> sys.stderr, "  getParameter() => OK"
+    if stp[0]:
+        print >> sys.stderr, "  getParameter() => OK"
+    assert(stp[0])
 
 def demoSetParameter():
     print >> sys.stderr, "2. setParameter"
-    stp_org = hcf.st_svc.getParameter()
+    stp_org = hcf.st_svc.getParameter()[1]
     # for tpcc
     stp_org.k_tpcc_p=[0.2, 0.2]
     stp_org.k_tpcc_x=[4.0, 4.0]
@@ -83,15 +85,15 @@ def demoSetParameter():
     stp_org.eefm_swing_rot_damping_gain = stp_org.eefm_rot_damping_gain[0]
     stp_org.eefm_swing_pos_damping_gain = stp_org.eefm_pos_damping_gain[0]
     stp_org.eefm_use_swing_damping=True
-    hcf.st_svc.setParameter(stp_org)
-    stp = hcf.st_svc.getParameter()
-    vcheck = stp.k_tpcc_p == stp_org.k_tpcc_p and stp.k_tpcc_x == stp_org.k_tpcc_x and stp.k_brot_p == stp_org.k_brot_p
+    ret = hcf.st_svc.setParameter(stp_org)
+    stp = hcf.st_svc.getParameter()[1]
+    vcheck = stp.k_tpcc_p == stp_org.k_tpcc_p and stp.k_tpcc_x == stp_org.k_tpcc_x and stp.k_brot_p == stp_org.k_brot_p and ret
     if vcheck:
         print >> sys.stderr, "  setParameter() => OK", vcheck
     assert(vcheck)
 
 def changeContactDecisionThre (thre):
-    stp = hcf.st_svc.getParameter()
+    stp = hcf.st_svc.getParameter()[1]
     stp.contact_decision_threshold=thre
     hcf.st_svc.setParameter(stp)
 
@@ -124,7 +126,7 @@ def printActualBase():
     print >> sys.stderr, "  actual base pos = ", act_base[0:3], "[m], actual base rpy = ", act_base[3:], "[rad]"
 
 def changeSTAlgorithm (new_st_alg):
-    stp = hcf.st_svc.getParameter()
+    stp = hcf.st_svc.getParameter()[1]
     if stp.st_algorithm != new_st_alg:
         hcf.stopStabilizer()
         stp.st_algorithm = new_st_alg
@@ -150,7 +152,7 @@ def demoSTLoadPattern ():
                                                [0.5]); # tms
         hcf.stopAutoBalancer()
         hcf.seq_svc.waitInterpolation()
-        stp = hcf.st_svc.getParameter()
+        stp = hcf.st_svc.getParameter()[1]
         stp.emergency_check_mode=OpenHRP.StabilizerService.NO_CHECK # Disable checking of emergency error because currently this error checker does not work correctly during walking.
         hcf.st_svc.setParameter(stp)
         #changeSTAlgorithm (OpenHRP.StabilizerService.EEFMQPCOP)
@@ -333,8 +335,8 @@ def demoSTTransitionAirGround ():
     print >> sys.stderr, "9. ST Transition (in the air and on the ground)"
     if hcf.pdc:
         # Init
-        stp_org = hcf.st_svc.getParameter()
-        stp = hcf.st_svc.getParameter()
+        stp_org = hcf.st_svc.getParameter()[1]
+        stp = hcf.st_svc.getParameter()[1]
         stp.transition_time = 0.1; # for fast checking
         hcf.st_svc.setParameter(stp)
         # Tests
@@ -342,24 +344,24 @@ def demoSTTransitionAirGround ():
         hcf.startStabilizer()
         mimicInTheAir()
         hcf.setJointAngles(hcf.getJointAngles(), stp.transition_time);hcf.waitInterpolation() # Wait transition
-        cmode1 = hcf.st_svc.getParameter().controller_mode
+        cmode1 = hcf.st_svc.getParameter()[1].controller_mode
         vcheck1 = (cmode1 == OpenHRP.StabilizerService.MODE_AIR)
         print >> sys.stderr, "  9-2. Check on the ground"
         mimicOnTheGround()
         hcf.setJointAngles(hcf.getJointAngles(), stp.transition_time);hcf.waitInterpolation() # Wait transition
-        cmode2 = hcf.st_svc.getParameter().controller_mode
+        cmode2 = hcf.st_svc.getParameter()[1].controller_mode
         vcheck2 = (cmode2 == OpenHRP.StabilizerService.MODE_ST)
         print >> sys.stderr, "  9-3. Check in the air and then stopST"
         mimicInTheAir()
         hcf.setJointAngles(hcf.getJointAngles(), 0.01);hcf.waitInterpolation() # Wait until in the air flag is invoked in onExecute
         hcf.stopStabilizer()
-        cmode3 = hcf.st_svc.getParameter().controller_mode
+        cmode3 = hcf.st_svc.getParameter()[1].controller_mode
         vcheck3 = (cmode3 == OpenHRP.StabilizerService.MODE_IDLE)
         print >> sys.stderr, "  9-4. Check on the ground"
         mimicOnTheGround()
         hcf.setJointAngles(hcf.getJointAngles(), 0.01);hcf.waitInterpolation() # Wait until on the ground flag is invoked in onExecute
         hcf.startStabilizer()
-        cmode4 = hcf.st_svc.getParameter().controller_mode
+        cmode4 = hcf.st_svc.getParameter()[1].controller_mode
         vcheck4 = (cmode4 == OpenHRP.StabilizerService.MODE_ST)
         # Finsh
         hcf.st_svc.setParameter(stp_org)

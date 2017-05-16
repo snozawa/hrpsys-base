@@ -238,14 +238,14 @@ module OpenHRP
      * @param i_param is output parameters
      * @return true if set successfully, false otherwise
      */
-    void getParameter(out stParam i_param);
+    boolean getParameter(out stParam i_param);
 
     /**
      * @brief Set Stabilizer parameters.
      * @param i_param is input parameters
      * @return true if set successfully, false otherwise
      */
-    void setParameter(in stParam i_param);
+    boolean setParameter(in stParam i_param);
 
     /**
      * @brief Start Stabilizer mode.

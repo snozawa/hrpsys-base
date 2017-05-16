@@ -1790,7 +1790,7 @@ void Stabilizer::stopStabilizer(void)
     std::cerr << "[" << m_profile.instance_name << "] " << "Stop ST DONE"  << std::endl;
 }
 
-void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
+bool Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
 {
   std::cerr << "[" << m_profile.instance_name << "] getParameter" << std::endl;
   for (size_t i = 0; i < 2; i++) {
@@ -1973,11 +1973,13 @@ void Stabilizer::getParameter(OpenHRP::StabilizerService::stParam& i_stp)
       ilp.reference_gain = stikp[i].reference_gain;
       ilp.manipulability_limit = jpe_v[i]->getManipulabilityLimit();
   }
+  return true;
 };
 
-void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
+bool Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
 {
   Guard guard(m_mutex);
+  bool is_set_parameter_ok = true;
   std::cerr << "[" << m_profile.instance_name << "] setParameter" << std::endl;
   for (size_t i = 0; i < 2; i++) {
     k_tpcc_p[i] = i_stp.k_tpcc_p[i];
@@ -2266,6 +2268,7 @@ void Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
       }
       std::cerr << "]" << std::endl;
   }
+  return is_set_parameter_ok;
 }
 
 std::string Stabilizer::getStabilizerAlgorithmString (OpenHRP::StabilizerService::STAlgorithm _st_algorithm)
