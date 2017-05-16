@@ -52,6 +52,7 @@ def demoGetParameter():
 
 def demoSetParameter():
     print >> sys.stderr, "2. setParameter"
+    print >> sys.stderr, "   Normal check"
     stp_org = hcf.st_svc.getParameter()[1]
     # for tpcc
     stp_org.k_tpcc_p=[0.2, 0.2]
@@ -87,10 +88,26 @@ def demoSetParameter():
     stp_org.eefm_use_swing_damping=True
     ret = hcf.st_svc.setParameter(stp_org)
     stp = hcf.st_svc.getParameter()[1]
-    vcheck = stp.k_tpcc_p == stp_org.k_tpcc_p and stp.k_tpcc_x == stp_org.k_tpcc_x and stp.k_brot_p == stp_org.k_brot_p and ret
-    if vcheck:
-        print >> sys.stderr, "  setParameter() => OK", vcheck
-    assert(vcheck)
+    vcheck1 = stp.k_tpcc_p == stp_org.k_tpcc_p and stp.k_tpcc_x == stp_org.k_tpcc_x and stp.k_brot_p == stp_org.k_brot_p and ret
+    print >> sys.stderr, "   Check for failure of set param"
+    vcheck2 = True
+    stp.is_zmp_calc_enable = [] # invalid
+    vcheck2 = vcheck2 and not hcf.st_svc.setParameter(stp)
+    stp = stp_org
+    stp.is_ik_enable = [] # invalid
+    vcheck2 = vcheck2 and not hcf.st_svc.setParameter(stp)
+    stp = stp_org
+    stp.is_feedback_control_enable = [] # invalid
+    vcheck2 = vcheck2 and not hcf.st_svc.setParameter(stp)
+    stp = stp_org
+    stp.ik_limb_parameters[0].ik_optional_weight_vector = [] # invalid
+    vcheck2 = vcheck2 and not hcf.st_svc.setParameter(stp)
+    stp = stp_org
+    stp.ik_limb_parameters = [] # invalid
+    vcheck2 = vcheck2 and not hcf.st_svc.setParameter(stp)
+    if vcheck1 and vcheck2:
+        print >> sys.stderr, "  setParameter() => OK, vcheck1 = ", vcheck1, ", vcheck2 = ", vcheck2
+    assert(vcheck1 and vcheck2)
 
 def changeContactDecisionThre (thre):
     stp = hcf.st_svc.getParameter()[1]

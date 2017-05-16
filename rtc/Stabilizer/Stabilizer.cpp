@@ -2050,7 +2050,7 @@ bool Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
           stikp[j].eefm_rot_compensation_limit = i_stp.eefm_rot_compensation_limit[j];
       }
   } else {
-      is_damping_parameter_ok = false;
+      is_damping_parameter_ok = is_set_parameter_ok = false;
   }
   for (size_t i = 0; i < 3; i++) {
     eefm_swing_pos_damping_gain(i) = i_stp.eefm_swing_pos_damping_gain[i];
@@ -2067,6 +2067,7 @@ bool Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
 
   if (i_stp.eefm_support_polygon_vertices_sequence.length() != stikp.size()) {
       std::cerr << "[" << m_profile.instance_name << "]   eefm_support_polygon_vertices_sequence cannot be set. Length " << i_stp.eefm_support_polygon_vertices_sequence.length() << " != " << stikp.size() << std::endl;
+      is_set_parameter_ok = false;
   } else {
       std::cerr << "[" << m_profile.instance_name << "]   eefm_support_polygon_vertices_sequence set" << std::endl;
       std::vector<std::vector<Eigen::Vector2d> > support_polygon_vec;
@@ -2096,9 +2097,9 @@ bool Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
       stikp[i].target_ee_diff_r_filter->setCutOffFreq(i_stp.eefm_ee_error_cutoff_freq);
       stikp[i].limb_length_margin = i_stp.limb_length_margin[i];
   }
-  setBoolSequenceParam(is_ik_enable, i_stp.is_ik_enable, std::string("is_ik_enable"));
-  setBoolSequenceParamWithCheckContact(is_feedback_control_enable, i_stp.is_feedback_control_enable, std::string("is_feedback_control_enable"));
-  setBoolSequenceParam(is_zmp_calc_enable, i_stp.is_zmp_calc_enable, std::string("is_zmp_calc_enable"));
+  is_set_parameter_ok = setBoolSequenceParam(is_ik_enable, i_stp.is_ik_enable, std::string("is_ik_enable")) && is_set_parameter_ok;
+  is_set_parameter_ok = setBoolSequenceParamWithCheckContact(is_feedback_control_enable, i_stp.is_feedback_control_enable, std::string("is_feedback_control_enable")) && is_set_parameter_ok;
+  is_set_parameter_ok = setBoolSequenceParam(is_zmp_calc_enable, i_stp.is_zmp_calc_enable, std::string("is_zmp_calc_enable")) && is_set_parameter_ok;
   emergency_check_mode = i_stp.emergency_check_mode;
 
   transition_time = i_stp.transition_time;
@@ -2201,12 +2202,13 @@ bool Stabilizer::setParameter(const OpenHRP::StabilizerService::stParam& i_stp)
   std::cerr << "[" << m_profile.instance_name << "]  IK limb parameters" << std::endl;
   bool is_ik_limb_parameter_valid_length = true;
   if (i_stp.ik_limb_parameters.length() != jpe_v.size()) {
-      is_ik_limb_parameter_valid_length = false;
+      is_ik_limb_parameter_valid_length = is_set_parameter_ok = false;
       std::cerr << "[" << m_profile.instance_name << "]   ik_limb_parameters invalid length! Cannot be set. (input = " << i_stp.ik_limb_parameters.length() << ", desired = " << jpe_v.size() << ")" << std::endl;
   } else {
       for (size_t i = 0; i < jpe_v.size(); i++) {
-          if (jpe_v[i]->numJoints() != i_stp.ik_limb_parameters[i].ik_optional_weight_vector.length())
-              is_ik_limb_parameter_valid_length = false;
+          if (jpe_v[i]->numJoints() != i_stp.ik_limb_parameters[i].ik_optional_weight_vector.length()) {
+              is_ik_limb_parameter_valid_length = is_set_parameter_ok = false;
+          }
       }
       if (is_ik_limb_parameter_valid_length) {
           for (size_t i = 0; i < jpe_v.size(); i++) {
@@ -2289,42 +2291,53 @@ std::string Stabilizer::getStabilizerAlgorithmString (OpenHRP::StabilizerService
     }
 };
 
-void Stabilizer::setBoolSequenceParam (std::vector<bool>& st_bool_values, const OpenHRP::StabilizerService::BoolSequence& output_bool_values, const std::string& prop_name)
+bool Stabilizer::setBoolSequenceParam (std::vector<bool>& st_bool_values, const OpenHRP::StabilizerService::BoolSequence& output_bool_values, const std::string& prop_name)
 {
-  std::vector<bool> prev_values;
+  bool ret = true;
+  std::vector<bool> prev_values, tmp_output_bool_values;
   prev_values.resize(st_bool_values.size());
   copy (st_bool_values.begin(), st_bool_values.end(), prev_values.begin());
-  if (st_bool_values.size() != output_bool_values.length()) {
-      std::cerr << "[" << m_profile.instance_name << "]   " << prop_name << " cannot be set. Length " << st_bool_values.size() << " != " << output_bool_values.length() << std::endl;
-  } else if ( (control_mode != MODE_IDLE) ) {
-      std::cerr << "[" << m_profile.instance_name << "]   " << prop_name << " cannot be set. Current control_mode is " << control_mode << std::endl;
-  } else {
-      for (size_t i = 0; i < st_bool_values.size(); i++) {
-          st_bool_values[i] = output_bool_values[i];
+  for (size_t i = 0; i < output_bool_values.length(); i++) tmp_output_bool_values.push_back(output_bool_values[i]);
+  if (st_bool_values.size() != tmp_output_bool_values.size()) {
+      std::cerr << "[" << m_profile.instance_name << "]   " << prop_name << " cannot be set. Length " << st_bool_values.size() << " != " << tmp_output_bool_values.size() << std::endl;
+      ret = false;
+  } else if ( st_bool_values != tmp_output_bool_values ) {
+      if ( (control_mode != MODE_IDLE) ) {
+          std::cerr << "[" << m_profile.instance_name << "]   " << prop_name << " cannot be set. Current control_mode is " << control_mode << std::endl;
+          ret = false;
+      } else {
+          for (size_t i = 0; i < st_bool_values.size(); i++) {
+              st_bool_values[i] = tmp_output_bool_values[i];
+          }
       }
+  } else {
+      std::cerr << "[" << m_profile.instance_name << "]   " << prop_name << " is same and not need to be changed." << std::endl;
   }
   std::cerr << "[" << m_profile.instance_name << "]   " << prop_name << " is ";
   for (size_t i = 0; i < st_bool_values.size(); i++) {
       std::cerr <<"[" << st_bool_values[i] << "]";
   }
   std::cerr << "(set = ";
-  for (size_t i = 0; i < output_bool_values.length(); i++) {
-      std::cerr <<"[" << output_bool_values[i] << "]";
+  for (size_t i = 0; i < tmp_output_bool_values.size(); i++) {
+      std::cerr <<"[" << tmp_output_bool_values[i] << "]";
   }
   std::cerr << ", prev = ";
   for (size_t i = 0; i < prev_values.size(); i++) {
       std::cerr <<"[" << prev_values[i] << "]";
   }
   std::cerr << ")" << std::endl;
+  return ret;
 };
 
-void Stabilizer::setBoolSequenceParamWithCheckContact (std::vector<bool>& st_bool_values, const OpenHRP::StabilizerService::BoolSequence& output_bool_values, const std::string& prop_name)
+bool Stabilizer::setBoolSequenceParamWithCheckContact (std::vector<bool>& st_bool_values, const OpenHRP::StabilizerService::BoolSequence& output_bool_values, const std::string& prop_name)
 {
+  bool ret = true;
   std::vector<bool> prev_values;
   prev_values.resize(st_bool_values.size());
   copy (st_bool_values.begin(), st_bool_values.end(), prev_values.begin());
   if (st_bool_values.size() != output_bool_values.length()) {
       std::cerr << "[" << m_profile.instance_name << "]   " << prop_name << " cannot be set. Length " << st_bool_values.size() << " != " << output_bool_values.length() << std::endl;
+      ret = false;
   } else if ( control_mode == MODE_IDLE ) {
     for (size_t i = 0; i < st_bool_values.size(); i++) {
       st_bool_values[i] = output_bool_values[i];
@@ -2361,6 +2374,7 @@ void Stabilizer::setBoolSequenceParamWithCheckContact (std::vector<bool>& st_boo
       std::cerr <<"[" << prev_values[i] << "]";
   }
   std::cerr << ")" << std::endl;
+  return ret;
 };
 
 void Stabilizer::waitSTTransition()
