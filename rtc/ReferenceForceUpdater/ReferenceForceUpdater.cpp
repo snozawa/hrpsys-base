@@ -464,7 +464,8 @@ RTC::ReturnCode_t ReferenceForceUpdater::onExecute(RTC::UniqueId ec_id)
   hrp::Vector3 tmp_moment = (foot_origin_rot.transpose() * ref_force[idx]) * transition_interpolator_ratio[idx];
   m_refFootOriginExtMoment.data.x = tmp_moment(0);
   m_refFootOriginExtMoment.data.y = tmp_moment(1);
-  m_refFootOriginExtMoment.data.z = tmp_moment(2);
+  //m_refFootOriginExtMoment.data.z = tmp_moment(2);
+  m_refFootOriginExtMoment.data.z = (m_RFUParam["footoriginextmoment"].is_hold_value?1.0:0.0);
   m_refFootOriginExtMoment.tm = m_qRef.tm;
   m_refFootOriginExtMomentOut.write();
 

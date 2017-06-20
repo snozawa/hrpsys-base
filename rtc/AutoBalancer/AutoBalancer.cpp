@@ -2005,6 +2005,11 @@ void AutoBalancer::calc_static_balance_point_from_forces(hrp::Vector3& sb_point,
   }
   hrp::Vector3 total_nosensor_ref_force = mg * hrp::Vector3::UnitZ() - total_sensor_ref_force; // total ref force at the point without sensors, such as torso
   hrp::Vector3 tmp_ext_moment = fix_leg_coords2.pos.cross(total_nosensor_ref_force) + fix_leg_coords2.rot * hrp::Vector3(m_refFootOriginExtMoment.data.x, m_refFootOriginExtMoment.data.y, m_refFootOriginExtMoment.data.z);
+  static hrp::Vector3 prev_root_pos = fix_leg_coords2.rot.transpose() * (m_robot->rootLink()->p-fix_leg_coords2.pos);
+  if ( std::fabs(m_refFootOriginExtMoment.data.z - 0.0) < 1e-3 ) { // not is_hold_value
+      prev_root_pos = fix_leg_coords2.rot.transpose() * (m_robot->rootLink()->p-fix_leg_coords2.pos);
+  }
+  hrp::Vector3 tmp_prev_root_pos = fix_leg_coords2.rot * prev_root_pos + fix_leg_coords2.pos;
   for (size_t j = 0; j < 2; j++) {
     nume(j) = mg * tmpcog(j);
     denom(j) = mg;
@@ -2028,7 +2033,9 @@ void AutoBalancer::calc_static_balance_point_from_forces(hrp::Vector3& sb_point,
         nume(j) += ( (fpos(2) - ref_com_height) * total_nosensor_ref_force(j) - fpos(j) * total_nosensor_ref_force(2) );
         denom(j) -= total_nosensor_ref_force(2);
     } else if ( use_force == MODE_REF_FORCE_RFU_EXT_MOMENT ) {
-        nume(j) += (j==0 ? tmp_ext_moment(1):-tmp_ext_moment(0));
+        // TODO
+        //nume(j) += (j==0 ? tmp_ext_moment(1):-tmp_ext_moment(0));
+        nume(j) += (tmp_prev_root_pos(j)-m_robot->rootLink()->p(j))*total_nosensor_ref_force(2) + (j==0 ? tmp_ext_moment(1):-tmp_ext_moment(0));
         denom(j) -= total_nosensor_ref_force(2);
     }
     sb_point(j) = nume(j) / denom(j);
@@ -2143,8 +2150,33 @@ void AutoBalancer::distributeReferenceZMPToWrenches (const hrp::Vector3& _ref_zm
     for (size_t i = 0 ; i < leg_names.size(); i++) {
         ABCIKparam& tmpikp = ikp[leg_names[i]];
         cop_pos.push_back(tmpikp.target_p0 + tmpikp.target_r0 * tmpikp.localR * default_zmp_offsets[i]);
-        limb_gains.push_back(m_contactStates.data[contact_states_index_map[leg_names[i]]] ? 1.0 : 0.0);
     }
+    static std::vector<double> support_time;
+    if (support_time.size() != ikp.size()) support_time.resize(ikp.size(), 0);
+    // limb gain
+    //std::cerr << "gain ";
+    for (size_t i = 0; i < leg_names.size(); i++) {
+        size_t idx = contact_states_index_map[leg_names[i]];
+        double eefm_pos_transition_time = 0.01;
+        double swing_support_gain = 0.0;
+        if (m_contactStates.data[idx]) { // Support
+            support_time[idx] += m_dt;
+            if (support_time[idx] > eefm_pos_transition_time) {
+                swing_support_gain = (m_controlSwingSupportTime.data[idx] / eefm_pos_transition_time);
+            } else {
+                swing_support_gain = (support_time[idx] / eefm_pos_transition_time);
+            }
+            swing_support_gain = std::max(0.0, std::min(1.0, swing_support_gain));
+        } else { // Swing
+            swing_support_gain = 0.0;
+            support_time[idx] = 0.0;
+        }
+        limb_gains.push_back(m_contactStates.data[contact_states_index_map[leg_names[i]]] ? 1.0 : 0.0);
+        //limb_gains.push_back(swing_support_gain);
+        //std::cerr << " " << swing_support_gain << " " << m_controlSwingSupportTime.data[idx];
+    }
+    //std::cerr << std::endl;
+    //
     size_t ee_num = leg_names.size();
     size_t state_dim = 6*ee_num;
     size_t total_wrench_dim = 5;
