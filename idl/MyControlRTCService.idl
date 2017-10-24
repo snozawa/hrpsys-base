@@ -1,0 +1,36 @@
+/**
+ * @file MyControlRTCService.idl
+ * @brief Services for my controller
+ */
+module OpenHRP
+{
+  interface MyControlRTCService
+  {
+    typedef sequence<double> DblSequence;
+    typedef sequence<string> StrSequence;
+    struct MyControlRTCParam {
+      /// String sequence
+      StrSequence str_sequence;
+      /// double sequence
+      DblSequence dbl_sequence;
+      /// A double.
+      double a_double_value;
+      /// A double.
+      long a_long_value;
+    };
+
+    /**
+     * @brief Set MyControlRTCParam
+     * @param i_param is MyControlRTCParam.
+     * @return true if set successfully, false otherwise
+     */
+    boolean setMyControlRTCParam(in MyControlRTCParam i_param);
+
+    /**
+     * @brief Get MyControlRTCParam
+     * @param i_param is MyControlRTCParam.
+     * @return true if set successfully, false otherwise
+     */
+    boolean getMyControlRTCParam(out MyControlRTCParam i_param);
+  };
+};
