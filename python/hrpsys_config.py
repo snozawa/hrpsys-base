@@ -268,6 +268,11 @@ class HrpsysConfigurator(object):
     octd_svc = None
     octd_version = None
 
+    # MyControlRTC
+    myc = None
+    myc_svc = None
+    myc_version = None
+
     # rtm manager
     ms = None
 
@@ -573,6 +578,11 @@ class HrpsysConfigurator(object):
             if self.abc:
                 connectPorts(self.abc.port("basePosOut"), self.acf.port("posIn"))
 
+        # MyControlRTC
+        if self.myc:
+            connectPorts(self.rh.port("q"), self.myc.port("qCurrent"))
+
+
     def activateComps(self):
         '''!@brief
         Activate components(plugins)
@@ -749,6 +759,7 @@ class HrpsysConfigurator(object):
             ['octd', "ObjectContactTurnaroundDetector"],
             ['es', "EmergencyStopper"],
             ['rfu', "ReferenceForceUpdater"],
+            ['myc', "MyControlRTC"],
             ['ic', "ImpedanceController"],
             ['abc', "AutoBalancer"],
             ['st', "Stabilizer"],
