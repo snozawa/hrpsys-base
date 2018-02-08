@@ -2161,7 +2161,13 @@ void AutoBalancer::calc_static_balance_point_from_forces(hrp::Vector3& sb_point,
           }
           tmpcog_value2(j) += -1 * fz * ref_cog(j);
           tmpcog_value2(j) += fxy * ref_com_height;
-          tmpcog_value2(j) += (ref_cog(2)-ref_com_height) * fz * gg->get_cog_acc()(2) / gg->get_gravitational_acceleration();
+          //tmpcog_value2(j) += (ref_cog(2)-ref_com_height) * fz * gg->get_cog_acc()(2) / gg->get_gravitational_acceleration();
+          // 加速度分を考慮、超テキトーコード
+          hrp::Vector3 tmpvv;
+          if (gg_is_walking) tmpvv = gg->get_cog_acc();
+          else tmpvv = hrp::Vector3::Zero();
+          tmpcog_value2(j) += (tmpcog(2)-ref_com_height) * fz * tmpvv(j) / gg->get_gravitational_acceleration();
+          //std::cerr << (tmpcog(2)-ref_com_height) << " " <<  fz << " " <<  gg->get_cog_acc()(j) << " " <<  gg->get_gravitational_acceleration() << std::endl;
           tmpcog_value2(j) = tmpcog_value2(j)/mg;
       }
   };
