@@ -622,12 +622,15 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
       // tmp
       {
           hrp::Vector3 tmpcogv = m_robot->calcCM();
+          // 現行のIKなど諸々終わった、最終的な重心位置
           m_tmpCogValues.data[0] = tmpcogv(0);
           m_tmpCogValues.data[1] = tmpcogv(1);
           m_tmpCogValues.data[2] = tmpcogv(2);
+          // 野沢式の重心位置
           m_tmpCogValues.data[3] = tmpcog_value0(0);
           m_tmpCogValues.data[4] = tmpcog_value0(1);
           m_tmpCogValues.data[5] = tmpcog_value0(2);
+          // こじお式の重心位置
           m_tmpCogValues.data[6] = tmpcog_value1(0);
           m_tmpCogValues.data[7] = tmpcog_value1(1);
           m_tmpCogValues.data[8] = tmpcog_value1(2);
