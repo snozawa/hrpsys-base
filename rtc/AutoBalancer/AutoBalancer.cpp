@@ -2106,17 +2106,20 @@ void AutoBalancer::calc_static_balance_point_from_forces(hrp::Vector3& sb_point,
       for (size_t j = 0; j < 2; j++) {
           // nozawa 式
           double fz = 0;
+          double fxy = 0;
           tmpcog_value0(j) = mg * ref_cog(j);
           for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
               if (std::find(leg_names.begin(), leg_names.end(), it->first) == leg_names.end()) {
                   size_t idx = contact_states_index_map[it->first];
                   // Force applied point is assumed as end effector
                   hrp::Vector3 fpos = it->second.target_link->p + it->second.target_link->R * it->second.localPos;
-                  tmpcog_value0(j) += fpos(j) * ref_forces[idx](2);
+                  tmpcog_value0(j) += fpos(j) * ref_forces[idx](2) - fpos(2) * ref_forces[idx](j);
                   fz += ref_forces[idx](2);
+                  fxy += ref_forces[idx](j);
               }
           }
           tmpcog_value0(j) += -1 * fz * ref_cog(j);
+          tmpcog_value0(j) += fxy * ref_com_height;
           tmpcog_value0(j) = tmpcog_value0(j)/mg;
       }
       // こじお式の結果をtmpcog_value1に代入
