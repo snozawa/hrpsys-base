@@ -297,7 +297,7 @@ class AutoBalancer
   hrp::Vector3 additional_force_applied_point_offset;
 
   // DEBUG
-  hrp::Vector3 tmpcog_value0, tmpcog_value1;
+  hrp::Vector3 tmpcog_value0, tmpcog_value1, tmpcog_value2;
 };
 
 

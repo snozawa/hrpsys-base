@@ -383,7 +383,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     additional_force_applied_link = m_robot->rootLink();
     additional_force_applied_point_offset = hrp::Vector3::Zero();
 
-    m_tmpCogValues.data.length(3*3);
+    m_tmpCogValues.data.length(3*4);
     return RTC::RTC_OK;
 }
 
@@ -626,7 +626,7 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
           m_tmpCogValues.data[0] = tmpcogv(0);
           m_tmpCogValues.data[1] = tmpcogv(1);
           m_tmpCogValues.data[2] = tmpcogv(2);
-          // 野沢式の重心位置
+          // 野沢式の重心位置（方法２）
           m_tmpCogValues.data[3] = tmpcog_value0(0);
           m_tmpCogValues.data[4] = tmpcog_value0(1);
           m_tmpCogValues.data[5] = tmpcog_value0(2);
@@ -634,6 +634,10 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
           m_tmpCogValues.data[6] = tmpcog_value1(0);
           m_tmpCogValues.data[7] = tmpcog_value1(1);
           m_tmpCogValues.data[8] = tmpcog_value1(2);
+          // 野沢式の重心位置（方法３）
+          m_tmpCogValues.data[9] = tmpcog_value2(0);
+          m_tmpCogValues.data[10] = tmpcog_value2(1);
+          m_tmpCogValues.data[11] = tmpcog_value2(2);
           m_tmpCogValuesOut.write();
       };
       // write
@@ -2101,7 +2105,7 @@ void AutoBalancer::calc_static_balance_point_from_forces(hrp::Vector3& sb_point,
   sb_point(2) = ref_com_height;
   // DEBUG
   {
-      // 野沢式の結果をtmpcog_value0に代入
+      // 野沢式の結果をtmpcog_value0に代入。メモの方法２
       tmpcog_value0 = hrp::Vector3::Zero();
       for (size_t j = 0; j < 2; j++) {
           // nozawa 式
@@ -2137,6 +2141,28 @@ void AutoBalancer::calc_static_balance_point_from_forces(hrp::Vector3& sb_point,
               }
           }
           tmpcog_value1(j) = tmpcog_value1(j)/(mg-fz);
+      }
+      // 野沢式の結果をtmpcog_value2に代入。メモの方法３
+      tmpcog_value2 = hrp::Vector3::Zero();
+      for (size_t j = 0; j < 2; j++) {
+          // nozawa 式
+          double fz = 0;
+          double fxy = 0;
+          tmpcog_value2(j) = mg * ref_cog(j);
+          for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+              if (std::find(leg_names.begin(), leg_names.end(), it->first) == leg_names.end()) {
+                  size_t idx = contact_states_index_map[it->first];
+                  // Force applied point is assumed as end effector
+                  hrp::Vector3 fpos = it->second.target_link->p + it->second.target_link->R * it->second.localPos;
+                  tmpcog_value2(j) += fpos(j) * ref_forces[idx](2) - fpos(2) * ref_forces[idx](j);
+                  fz += ref_forces[idx](2);
+                  fxy += ref_forces[idx](j);
+              }
+          }
+          tmpcog_value2(j) += -1 * fz * ref_cog(j);
+          tmpcog_value2(j) += fxy * ref_com_height;
+          tmpcog_value2(j) += (ref_cog(2)-ref_com_height) * fz * gg->get_cog_acc()(2) / gg->get_gravitational_acceleration();
+          tmpcog_value2(j) = tmpcog_value2(j)/mg;
       }
   };
 };
