@@ -2098,8 +2098,10 @@ void AutoBalancer::calc_static_balance_point_from_forces(hrp::Vector3& sb_point,
   sb_point(2) = ref_com_height;
   // DEBUG
   {
+      // 野沢式の結果をtmpcog_value0に代入
       tmpcog_value0 = hrp::Vector3::Zero();
       for (size_t j = 0; j < 2; j++) {
+          // nozawa 式
           double fz = 0;
           tmpcog_value0(j) = mg * ref_cog(j);
           for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
@@ -2114,6 +2116,7 @@ void AutoBalancer::calc_static_balance_point_from_forces(hrp::Vector3& sb_point,
           tmpcog_value0(j) += -1 * fz * ref_cog(j);
           tmpcog_value0(j) = tmpcog_value0(j)/mg;
       }
+      // こじお式の結果をtmpcog_value1に代入
       tmpcog_value1 = hrp::Vector3::Zero();
       for (size_t j = 0; j < 2; j++) {
           double fz = 0;
