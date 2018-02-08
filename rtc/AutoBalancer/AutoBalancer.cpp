@@ -76,6 +76,7 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_controlSwingSupportTimeOut("controlSwingSupportTime", m_controlSwingSupportTime),
       m_walkingStatesOut("walkingStates", m_walkingStates),
       m_sbpCogOffsetOut("sbpCogOffset", m_sbpCogOffset),
+      m_tmpCogValuesOut("tmpCogValues", m_tmpCogValues),
       m_cogOut("cogOut", m_cog),
       m_AutoBalancerServicePort("AutoBalancerService"),
       // </rtc-template>
@@ -124,6 +125,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addOutPort("cogOut", m_cogOut);
     addOutPort("walkingStates", m_walkingStatesOut);
     addOutPort("sbpCogOffset", m_sbpCogOffsetOut);
+    addOutPort("tmpCogValues", m_tmpCogValuesOut);
   
     // Set service provider to Ports
     m_AutoBalancerServicePort.registerProvider("service0", "AutoBalancerService", m_service0);
@@ -380,6 +382,8 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
 
     additional_force_applied_link = m_robot->rootLink();
     additional_force_applied_point_offset = hrp::Vector3::Zero();
+
+    m_tmpCogValues.data.length(3*3);
     return RTC::RTC_OK;
 }
 
@@ -615,6 +619,20 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
       m_sbpCogOffset.data.y = sbp_cog_offset(1);
       m_sbpCogOffset.data.z = sbp_cog_offset(2);
       m_sbpCogOffset.tm = m_qRef.tm;
+      // tmp
+      {
+          hrp::Vector3 tmpcogv = m_robot->calcCM();
+          m_tmpCogValues.data[0] = tmpcogv(0);
+          m_tmpCogValues.data[1] = tmpcogv(1);
+          m_tmpCogValues.data[2] = tmpcogv(2);
+          m_tmpCogValues.data[3] = tmpcog_value0(0);
+          m_tmpCogValues.data[4] = tmpcog_value0(1);
+          m_tmpCogValues.data[5] = tmpcog_value0(2);
+          m_tmpCogValues.data[6] = tmpcog_value1(0);
+          m_tmpCogValues.data[7] = tmpcog_value1(1);
+          m_tmpCogValues.data[8] = tmpcog_value1(2);
+          m_tmpCogValuesOut.write();
+      };
       // write
       m_basePosOut.write();
       m_baseRpyOut.write();
@@ -2078,6 +2096,40 @@ void AutoBalancer::calc_static_balance_point_from_forces(hrp::Vector3& sb_point,
     sb_point(j) = nume(j) / denom(j);
   }
   sb_point(2) = ref_com_height;
+  // DEBUG
+  {
+      tmpcog_value0 = hrp::Vector3::Zero();
+      for (size_t j = 0; j < 2; j++) {
+          double fz = 0;
+          tmpcog_value0(j) = mg * ref_cog(j);
+          for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+              if (std::find(leg_names.begin(), leg_names.end(), it->first) == leg_names.end()) {
+                  size_t idx = contact_states_index_map[it->first];
+                  // Force applied point is assumed as end effector
+                  hrp::Vector3 fpos = it->second.target_link->p + it->second.target_link->R * it->second.localPos;
+                  tmpcog_value0(j) += fpos(j) * ref_forces[idx](2);
+                  fz += ref_forces[idx](2);
+              }
+          }
+          tmpcog_value0(j) += -1 * fz * ref_cog(j);
+          tmpcog_value0(j) = tmpcog_value0(j)/mg;
+      }
+      tmpcog_value1 = hrp::Vector3::Zero();
+      for (size_t j = 0; j < 2; j++) {
+          double fz = 0;
+          tmpcog_value1(j) = mg * ref_cog(j);
+          for ( std::map<std::string, ABCIKparam>::iterator it = ikp.begin(); it != ikp.end(); it++ ) {
+              if (std::find(leg_names.begin(), leg_names.end(), it->first) == leg_names.end()) {
+                  size_t idx = contact_states_index_map[it->first];
+                  // Force applied point is assumed as end effector
+                  hrp::Vector3 fpos = it->second.target_link->p + it->second.target_link->R * it->second.localPos;
+                  tmpcog_value1(j) -= fpos(j) * ref_forces[idx](2);
+                  fz += ref_forces[idx](2);
+              }
+          }
+          tmpcog_value1(j) = tmpcog_value1(j)/(mg-fz);
+      }
+  };
 };
 
 #ifndef rad2deg

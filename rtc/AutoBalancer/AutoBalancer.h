@@ -179,6 +179,9 @@ class AutoBalancer
   std::vector<OutPort<TimedPoint3D> *> m_limbCOPOffsetOut;
   // for debug
   OutPort<TimedPoint3D> m_cogOut;
+  // DEBUG
+  TimedDoubleSeq m_tmpCogValues;
+  OutPort<TimedDoubleSeq> m_tmpCogValuesOut;
   
   // </rtc-template>
 
@@ -292,6 +295,9 @@ class AutoBalancer
   // Used for ref force balancing.
   hrp::Link* additional_force_applied_link;
   hrp::Vector3 additional_force_applied_point_offset;
+
+  // DEBUG
+  hrp::Vector3 tmpcog_value0, tmpcog_value1;
 };
 
 
