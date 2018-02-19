@@ -1093,6 +1093,15 @@ namespace rats
     {
         return std::find_if(leg_type_map.begin(), leg_type_map.end(), (&boost::lambda::_1->* &std::map<leg_type, std::string>::value_type::second == ee_name))->first;
     };
+    inline bool is_refzmp_queue_padding () const
+    {
+        // Addhoc : Additional padding of refzmp queue to wait for convergence of COG tracking.
+        if (preview_controller_ptr->get_delay() >= static_cast<size_t>(round(default_step_time/dt))) { // If step time is smaller than delay, consider padding
+            return (finalize_count < preview_controller_ptr->get_delay() - static_cast<size_t>(round(default_step_time/dt)));
+        } else { // If step time is larger than delay, do not consider padding because there is enough refzmp queue.
+            return false;
+        }
+    };
 
 #ifndef HAVE_MAIN
     /* inhibit copy constructor and copy insertion not by implementing */

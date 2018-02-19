@@ -722,7 +722,7 @@ namespace rats
         prev_que_rzmp = rzmp;
         prev_que_sfzos = sfzos;
       }
-      solved = preview_controller_ptr->update(refzmp, cog, swing_foot_zmp_offsets, rzmp, sfzos, (refzmp_exist_p || finalize_count < preview_controller_ptr->get_delay()-static_cast<size_t>(round(default_step_time/dt))));
+      solved = preview_controller_ptr->update(refzmp, cog, swing_foot_zmp_offsets, rzmp, sfzos, (refzmp_exist_p || is_refzmp_queue_padding() ));
     }
 
     rg.update_refzmp();
@@ -1154,7 +1154,7 @@ namespace rats
       prev_que_rzmp = rzmp;
       prev_que_sfzos = sfzos;
     }
-    solved = preview_controller_ptr->update(refzmp, cog, swing_foot_zmp_offsets, rzmp, sfzos, (refzmp_exist_p || finalize_count < preview_controller_ptr->get_delay()-static_cast<size_t>(round(default_step_time/dt))));
+    solved = preview_controller_ptr->update(refzmp, cog, swing_foot_zmp_offsets, rzmp, sfzos, (refzmp_exist_p || is_refzmp_queue_padding() ));
     rg.update_refzmp();
   };
 
