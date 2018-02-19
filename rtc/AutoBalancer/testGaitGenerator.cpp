@@ -714,7 +714,9 @@ private:
         is_step_time_valid = step_time_list.size() == fsl.size();
         if (is_step_time_valid) {
             for (size_t i = 0; i < step_time_list.size(); i++) {
-                is_step_time_valid = eps_eq(step_time_list[i], fsl[i][0].step_time, 1e-5) && is_step_time_valid;
+                // Fix for https://github.com/fkanehiro/hrpsys-base/issues/1230.
+                // step time difference should smaller than dt. 0.9 is scaling.
+                is_step_time_valid = eps_eq(step_time_list[i], fsl[i][0].step_time, dt*0.9) && is_step_time_valid;
             }
         }
         // Check toe heel angle by comparing calculated toe heel angle (min/max = heel/toe) vs input footsteps toe heel angles
@@ -1262,6 +1264,20 @@ public:
         gen_and_plot_walk_pattern();
     };
 
+    void test21 ()
+    {
+        test_doc_string = "test21 : Test for step time validity (Go pos x)";
+        /* initialize sample footstep_list */
+        parse_params();
+        gg->set_default_step_time(1+dt*0.999);
+        //gg->set_default_step_time(1+dt); // OK
+        gg->clear_footstep_nodes_list();
+        coordinates start_ref_coords;
+        mid_coords(start_ref_coords, 0.5, coordinates(leg_pos[1]), coordinates(leg_pos[0]));
+        gg->go_pos_param_2_footstep_nodes_list(300*1e-3, 0, 0, boost::assign::list_of(coordinates(leg_pos[1])), start_ref_coords, boost::assign::list_of(LLEG));
+        gen_and_plot_walk_pattern();
+    };
+
     void parse_params (bool is_print_doc_setring = true)
     {
       if (is_print_doc_setring) std::cerr << test_doc_string << std::endl;
@@ -1395,6 +1411,7 @@ void print_usage ()
     std::cerr << "  --test18 : Test goVelocity with changing velocity (translation and rotation)" << std::endl;
     std::cerr << "  --test19 : Change stride parameter (translate)" << std::endl;
     std::cerr << "  --test20 : Change stride parameter (translate+rotate)" << std::endl;
+    std::cerr << "  --test21 : Test for step time validity (Go pos x)" << std::endl;
     std::cerr << " [option] should be:" << std::endl;
     std::cerr << "  --use-gnuplot : Use gnuplot and dump eps file to /tmp. (true/false, true by default)" << std::endl;
     std::cerr << "  --use-graph-append : Append generated graph to /tmp/testGaitGenerator.jpg. (true/false, false by default)" << std::endl;
@@ -1451,6 +1468,8 @@ int main(int argc, char* argv[])
           tgg.test19();
       } else if (std::string(argv[1]) == "--test20") {
           tgg.test20();
+      } else if (std::string(argv[1]) == "--test21") {
+          tgg.test21();
       } else {
           print_usage();
           ret = 1;
