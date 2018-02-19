@@ -1184,7 +1184,7 @@ public:
         while ( gg->proc_one_tick() ) {
             proc_one_walking_motion(i);
             i++;
-            if ( i > static_cast<size_t>(gg->get_default_step_time()/dt) && gg->get_overwrite_check_timing() ) {
+            if ( i > static_cast<size_t>(round(gg->get_default_step_time()/dt)) && gg->get_overwrite_check_timing() ) {
                 gg->finalize_velocity_mode();
             }
         }
@@ -1214,15 +1214,15 @@ public:
         while ( gg->proc_one_tick() ) {
             proc_one_walking_motion(i);
             i++;
-            if ( i > static_cast<size_t>(gg->get_default_step_time()/dt)*5 && gg->get_overwrite_check_timing() ) {
+            if ( i > static_cast<size_t>(round(gg->get_default_step_time()/dt))*5 && gg->get_overwrite_check_timing() ) {
                 gg->finalize_velocity_mode();
-            } else if ( i > static_cast<size_t>(gg->get_default_step_time()/dt)*4 && gg->get_overwrite_check_timing() ) {
+            } else if ( i > static_cast<size_t>(round(gg->get_default_step_time()/dt))*4 && gg->get_overwrite_check_timing() ) {
                 gg->set_velocity_param(0, 0, 0);
-            } else if ( i > static_cast<size_t>(gg->get_default_step_time()/dt)*3 && gg->get_overwrite_check_timing() ) {
+            } else if ( i > static_cast<size_t>(round(gg->get_default_step_time()/dt))*3 && gg->get_overwrite_check_timing() ) {
                 gg->set_velocity_param(0, 0, 10);
-            } else if ( i > static_cast<size_t>(gg->get_default_step_time()/dt)*2 && gg->get_overwrite_check_timing() ) {
+            } else if ( i > static_cast<size_t>(round(gg->get_default_step_time()/dt))*2 && gg->get_overwrite_check_timing() ) {
                 gg->set_velocity_param(0, 0, 0);
-            } else if ( i > static_cast<size_t>(gg->get_default_step_time()/dt) && gg->get_overwrite_check_timing() ) {
+            } else if ( i > static_cast<size_t>(round(gg->get_default_step_time()/dt)) && gg->get_overwrite_check_timing() ) {
                 gg->set_velocity_param(0.1, 0.05, 0);
             }
         }

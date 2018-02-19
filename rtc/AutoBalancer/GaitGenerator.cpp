@@ -98,7 +98,7 @@ namespace rats
         swing_leg_types.push_back(fns.at(i).l_r);
     }
     swing_leg_types_list.push_back( swing_leg_types );
-    step_count_list.push_back(static_cast<size_t>(fns.front().step_time/dt));
+    step_count_list.push_back(static_cast<size_t>(round(fns.front().step_time/dt)));
     toe_heel_types_list.push_back(toe_heel_types(SOLE, SOLE));
     //std::cerr << "double " << (fns[fs_index].l_r==RLEG?LLEG:RLEG) << " [" << refzmp_cur_list.back()(0) << " " << refzmp_cur_list.back()(1) << " " << refzmp_cur_list.back()(2) << "]" << std::endl;
   };
@@ -125,7 +125,7 @@ namespace rats
         swing_leg_types.push_back(fns.at(i).l_r);
     }
     swing_leg_types_list.push_back( swing_leg_types );
-    step_count_list.push_back(static_cast<size_t>(fns.front().step_time/dt));
+    step_count_list.push_back(static_cast<size_t>(round(fns.front().step_time/dt)));
     toe_heel_types_list.push_back(tht);
     //std::cerr << "single " << fns[fs_index-1].l_r << " [" << refzmp_cur_list.back()(0) << " " << refzmp_cur_list.back()(1) << " " << refzmp_cur_list.back()(2) << "]" << std::endl;
   };
@@ -564,11 +564,11 @@ namespace rats
         current_step_height = current_toe_angle = current_heel_angle = 0.0;
       }
       if (footstep_index < fnsl.size()) {
-        one_step_count = static_cast<size_t>(fnsl[footstep_index].front().step_time/dt);
+        one_step_count = static_cast<size_t>(round(fnsl[footstep_index].front().step_time/dt));
         thp.set_one_step_count(one_step_count);
       }
       if (footstep_index + 1 < fnsl.size()) {
-        next_one_step_count = static_cast<size_t>(fnsl[footstep_index+1].front().step_time/dt);
+          next_one_step_count = static_cast<size_t>(round(fnsl[footstep_index+1].front().step_time/dt));
       }
       lcg_count = one_step_count;
       switch (default_orbit_type) {
@@ -602,7 +602,7 @@ namespace rats
                                                   const double delay)
   {
     /* clear all gait_parameter */
-    size_t one_step_len = footstep_nodes_list.front().front().step_time / dt;
+    size_t one_step_len = static_cast<size_t>(round(footstep_nodes_list.front().front().step_time / dt));
     finalize_count = 0;
     for (std::vector<step_node>::iterator it_fns = footstep_nodes_list.front().begin(); it_fns != footstep_nodes_list.front().end(); it_fns++) {
         for (std::vector<step_node>::const_iterator it_init = initial_swing_leg_dst_steps.begin(); it_init != initial_swing_leg_dst_steps.end(); it_init++) {
@@ -631,7 +631,7 @@ namespace rats
     }
     //preview_controller_ptr = new preview_dynamics_filter<preview_control>(dt, cog(2) - refzmp_cur_list[0](2), refzmp_cur_list[0]);
     preview_controller_ptr = new preview_dynamics_filter<extended_preview_control>(dt, cog(2) - rg.get_refzmp_cur()(2), rg.get_refzmp_cur(), gravitational_acceleration);
-    lcg.reset(one_step_len, footstep_nodes_list.at(1).front().step_time/dt, initial_swing_leg_dst_steps, initial_swing_leg_dst_steps, initial_support_leg_steps, default_double_support_ratio_swing_before, default_double_support_ratio_swing_after);
+    lcg.reset(one_step_len, static_cast<size_t>(round(footstep_nodes_list.at(1).front().step_time/dt)), initial_swing_leg_dst_steps, initial_swing_leg_dst_steps, initial_support_leg_steps, default_double_support_ratio_swing_before, default_double_support_ratio_swing_after);
     /* make another */
     lcg.set_swing_support_steps_list(footstep_nodes_list);
     for (size_t i = 1; i < footstep_nodes_list.size()-1; i++) {
@@ -722,7 +722,7 @@ namespace rats
         prev_que_rzmp = rzmp;
         prev_que_sfzos = sfzos;
       }
-      solved = preview_controller_ptr->update(refzmp, cog, swing_foot_zmp_offsets, rzmp, sfzos, (refzmp_exist_p || finalize_count < preview_controller_ptr->get_delay()-default_step_time/dt));
+      solved = preview_controller_ptr->update(refzmp, cog, swing_foot_zmp_offsets, rzmp, sfzos, (refzmp_exist_p || finalize_count < preview_controller_ptr->get_delay()-static_cast<size_t>(round(default_step_time/dt))));
     }
 
     rg.update_refzmp();
@@ -794,7 +794,7 @@ namespace rats
       if (lcg.get_footstep_index() > 0 && lcg.get_footstep_index() < footstep_nodes_list.size()-2) {
         // calculate sum of preview_f
         static double preview_f_sum;
-        if (lcg.get_lcg_count() == static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1) {
+        if (lcg.get_lcg_count() == static_cast<size_t>(round(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0)) - 1) {
           preview_f_sum = preview_controller_ptr->get_preview_f(preview_controller_ptr->get_delay());
           for (size_t i = preview_controller_ptr->get_delay()-1; i >= lcg.get_lcg_count()+1; i--) {
             preview_f_sum += preview_controller_ptr->get_preview_f(i);
@@ -809,9 +809,9 @@ namespace rats
         hrp::Vector3 d_footstep = -1/preview_f_sum * 1/preview_db * footstep_modification_gain * tmp_diff_cp;
         d_footstep(2) = 0.0;
         // overwrite footsteps
-        if (lcg.get_lcg_count() <= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0) - 1 &&
-            lcg.get_lcg_count() >= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * (default_double_support_ratio_after + margin_time_ratio)) - 1 &&
-            !(lcg.get_lcg_count() <= static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 0.5) - 1 && act_contact_states[0] && act_contact_states[1])) {
+        if (lcg.get_lcg_count() <= static_cast<size_t>(round(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 1.0)) - 1 &&
+            lcg.get_lcg_count() >= static_cast<size_t>(round(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * (default_double_support_ratio_after + margin_time_ratio))) - 1 &&
+            !(lcg.get_lcg_count() <= static_cast<size_t>(round(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 0.5)) - 1 && act_contact_states[0] && act_contact_states[1])) {
           // stride limitation check
           hrp::Vector3 orig_footstep_pos = footstep_nodes_list[get_overwritable_index()].front().worldcoords.pos;
           for (size_t i = 0; i < 2; i++) {
@@ -1100,7 +1100,7 @@ namespace rats
     if (overwritable_footstep_index_offset == 0) {
         rg.set_refzmp_count(lcg.get_lcg_count()); // Start refzmp_count from current remaining footstep count of swinging.
     } else {
-        rg.set_refzmp_count(static_cast<size_t>(fnsl[0][0].step_time/dt)); // Start refzmp_count from step length of first overwrite step
+        rg.set_refzmp_count(static_cast<size_t>(round(fnsl[0][0].step_time/dt))); // Start refzmp_count from step length of first overwrite step
     }
     /*   reset refzmp */
     for (size_t i = 0; i < fnsl.size(); i++) {
@@ -1154,7 +1154,7 @@ namespace rats
       prev_que_rzmp = rzmp;
       prev_que_sfzos = sfzos;
     }
-    solved = preview_controller_ptr->update(refzmp, cog, swing_foot_zmp_offsets, rzmp, sfzos, (refzmp_exist_p || finalize_count < preview_controller_ptr->get_delay()-default_step_time/dt));
+    solved = preview_controller_ptr->update(refzmp, cog, swing_foot_zmp_offsets, rzmp, sfzos, (refzmp_exist_p || finalize_count < preview_controller_ptr->get_delay()-static_cast<size_t>(round(default_step_time/dt))));
     rg.update_refzmp();
   };
 

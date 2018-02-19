@@ -131,7 +131,7 @@ namespace rats
             double ratio_sum = 0.0;
             for (size_t i = 0; i < NUM_TH_PHASES; i++) {
                 ratio_sum += toe_heel_phase_ratio[i];
-                toe_heel_phase_count[i] = static_cast<size_t>(one_step_count * ratio_sum);
+                toe_heel_phase_count[i] = static_cast<size_t>(round(one_step_count * ratio_sum));
             }
         };
     public:
@@ -461,7 +461,7 @@ namespace rats
           size_t tmp_time_offset_count = time_offset/dt;
           //size_t final_path_count = 0; // Revert to previous version
           size_t final_path_count = final_path_distance_ratio * swing_one_step_count;
-          if (final_path_count>static_cast<size_t>(time_offset_xy2z/dt)) final_path_count = static_cast<size_t>(time_offset_xy2z/dt);
+          if (final_path_count>static_cast<size_t>(round(time_offset_xy2z/dt))) final_path_count = static_cast<size_t>(round(time_offset_xy2z/dt));
           // XY interpolation
           if (swing_remain_count > final_path_count+tmp_time_offset_count) { // antecedent path is still interpolating
             hrp::Vector3 tmpgoal = interpolate_antecedent_path((swing_one_step_count - swing_remain_count) / static_cast<double>(swing_one_step_count - (final_path_count+tmp_time_offset_count)));
@@ -1499,7 +1499,7 @@ namespace rats
     const std::map<leg_type, std::string> get_leg_type_map () const { return leg_type_map; };
     size_t get_optional_go_pos_finalize_footstep_num () const { return optional_go_pos_finalize_footstep_num; };
     bool is_finalizing (const double tm) const { return ((preview_controller_ptr->get_delay()*2 - default_step_time/dt)-finalize_count) <= (tm/dt)-1; };
-    size_t get_overwrite_check_timing () const { return static_cast<size_t>(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 0.5) - 1;}; // Almost middle of step time
+    size_t get_overwrite_check_timing () const { return static_cast<size_t>(round(footstep_nodes_list[lcg.get_footstep_index()][0].step_time/dt * 0.5)) - 1;}; // Almost middle of step time
     double get_leg_margin (const size_t idx) const { return leg_margin[idx]; };
     double get_stride_limitation_for_circle_type (const size_t idx) const { return stride_limitation_for_circle_type[idx]; };
     double get_overwritable_stride_limitation (const size_t idx) const { return overwritable_stride_limitation[idx]; };
