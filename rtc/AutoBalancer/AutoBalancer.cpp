@@ -976,6 +976,13 @@ void AutoBalancer::calculateOutputRefForces ()
     }
     if ( use_force == MODE_REF_FORCE_WITH_FOOT || use_force == MODE_REF_FORCE_RFU_EXT_MOMENT ) { // TODO : use other use_force mode. This should be depends on Stabilizer distribution mode.
         distributeReferenceZMPToWrenches (ref_zmp);
+    } else {
+      // Set force
+      for (unsigned int i=0; i< m_force.size(); i++) {
+          for (unsigned int j=0; j<6; j++) {
+              m_force[i].data[j] = m_ref_force[i].data[j];
+          }
+      }
     }
     prev_ref_zmp = ref_zmp;
 };
@@ -2066,7 +2073,7 @@ void AutoBalancer::calc_static_balance_point_from_forces(hrp::Vector3& sb_point,
             if (std::find(leg_names.begin(), leg_names.end(), it->first) == leg_names.end()) {
                 size_t idx = contact_states_index_map[it->first];
                 // Force applied point is assumed as end effector
-                hrp::Vector3 fpos = it->second.target_link->p + it->second.target_link->R * it->second.localPos;
+                hrp::Vector3 fpos = (it->second.target_p0);
                 nume(j) += ( (fpos(2) - ref_com_height) * ref_forces[idx](j) - fpos(j) * ref_forces[idx](2) );
                 nume(j) += (j==0 ? ref_moments[idx](1):-ref_moments[idx](0));
                 denom(j) -= ref_forces[idx](2);

@@ -966,17 +966,31 @@ void Stabilizer::getActualParameters ()
                                            eefm_gravitational_acceleration * total_mass, dt,
                                            DEBUGP, std::string(m_profile.instance_name));
       } else if (st_algorithm == OpenHRP::StabilizerService::EEFMQP) {
+          // TODO : fix for foot force is not zero
+          double tmp_total_fz = eefm_gravitational_acceleration * total_mass;
+          for (size_t i = 0; i < stikp.size(); i++) {
+              if (stikp[i].ee_name.find("leg") == std::string::npos) {
+                  tmp_total_fz -= ref_force[i](2);
+              }
+          }
           szd->distributeZMPToForceMomentsQP(tmp_ref_force, tmp_ref_moment,
                                              ee_pos, cop_pos, ee_rot, ee_name, limb_gains, tmp_toeheel_ratio,
                                              new_refzmp, hrp::Vector3(foot_origin_rot * ref_zmp + foot_origin_pos),
-                                             eefm_gravitational_acceleration * total_mass, dt,
+                                             tmp_total_fz, dt,
                                              DEBUGP, std::string(m_profile.instance_name),
                                              (st_algorithm == OpenHRP::StabilizerService::EEFMQPCOP));
       } else if (st_algorithm == OpenHRP::StabilizerService::EEFMQPCOP) {
+          // TODO : fix for foot force is not zero
+          double tmp_total_fz = eefm_gravitational_acceleration * total_mass;
+          for (size_t i = 0; i < stikp.size(); i++) {
+              if (stikp[i].ee_name.find("leg") == std::string::npos) {
+                  tmp_total_fz -= ref_force[i](2);
+              }
+          }
           szd->distributeZMPToForceMomentsPseudoInverse(tmp_ref_force, tmp_ref_moment,
                                              ee_pos, cop_pos, ee_rot, ee_name, limb_gains, tmp_toeheel_ratio,
                                              new_refzmp, hrp::Vector3(foot_origin_rot * ref_zmp + foot_origin_pos),
-                                             eefm_gravitational_acceleration * total_mass, dt,
+                                             tmp_total_fz, dt,
                                              DEBUGP, std::string(m_profile.instance_name),
                                              (st_algorithm == OpenHRP::StabilizerService::EEFMQPCOP), is_contact_list);
       } else if (st_algorithm == OpenHRP::StabilizerService::EEFMQPCOP2) {
