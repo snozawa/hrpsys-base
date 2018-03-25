@@ -1027,7 +1027,11 @@ void AutoBalancer::updateWalkingVelocityFromHandError (coordinates& tmp_fix_coor
     //         gg->set_offset_velocity_param(0,0,0);
     //     }
     // }
-    gg->get_velocity_param(m_debugData.data[0], m_debugData.data[1], m_debugData.data[2]);
+    double vel_x, vel_y, vel_theta;
+    gg->get_velocity_param(vel_x, vel_y, vel_theta);
+    m_debugData.data[0] = vel_x;
+    m_debugData.data[1] = vel_y;
+    m_debugData.data[2] = vel_theta;
 };
 
 void AutoBalancer::calcReferenceJointAnglesForIK ()
