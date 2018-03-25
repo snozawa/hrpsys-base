@@ -77,6 +77,7 @@ AutoBalancer::AutoBalancer(RTC::Manager* manager)
       m_walkingStatesOut("walkingStates", m_walkingStates),
       m_sbpCogOffsetOut("sbpCogOffset", m_sbpCogOffset),
       m_cogOut("cogOut", m_cog),
+      m_debugDataOut("debugData", m_debugData),
       m_AutoBalancerServicePort("AutoBalancerService"),
       // </rtc-template>
       gait_type(BIPED),
@@ -122,6 +123,7 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
     addOutPort("toeheelRatio", m_toeheelRatioOut);
     addOutPort("controlSwingSupportTime", m_controlSwingSupportTimeOut);
     addOutPort("cogOut", m_cogOut);
+    addOutPort("debugData", m_debugDataOut);
     addOutPort("walkingStates", m_walkingStatesOut);
     addOutPort("sbpCogOffset", m_sbpCogOffsetOut);
   
@@ -381,6 +383,8 @@ RTC::ReturnCode_t AutoBalancer::onInitialize()
 
     additional_force_applied_link = m_robot->rootLink();
     additional_force_applied_point_offset = hrp::Vector3::Zero();
+
+    m_debugData.data.length(3+3); // original vel, modified vel
     return RTC::RTC_OK;
 }
 
@@ -616,6 +620,10 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
       m_sbpCogOffset.data.y = sbp_cog_offset(1);
       m_sbpCogOffset.data.z = sbp_cog_offset(2);
       m_sbpCogOffset.tm = m_qRef.tm;
+      // debug
+      // for (size_t ii = 0; ii < m_debugData.data.length(); ii++) {
+      //     m_debugData.data[ii] = ;
+      m_debugData.tm = m_qRef.tm;
       // write
       m_basePosOut.write();
       m_baseRpyOut.write();
@@ -624,6 +632,7 @@ RTC::ReturnCode_t AutoBalancer::onExecute(RTC::UniqueId ec_id)
       m_zmpOut.write();
       m_cogOut.write();
       m_sbpCogOffsetOut.write();
+      m_debugDataOut.write();
 
       // reference acceleration
       hrp::Sensor* sen = m_robot->sensor<hrp::RateGyroSensor>("gyrometer");
@@ -1010,11 +1019,15 @@ void AutoBalancer::updateWalkingVelocityFromHandError (coordinates& tmp_fix_coor
     if ( gg_is_walking && gg->get_lcg_count() == gg->get_overwrite_check_timing()+2 ) {
         hrp::Vector3 vel_htc(calc_vel_from_hand_error(tmp_fix_coords));
         gg->set_offset_velocity_param(vel_htc(0), vel_htc(1) ,vel_htc(2));
+        m_debugData.data[3] = vel_htc(0);
+        m_debugData.data[4] = vel_htc(1);
+        m_debugData.data[5] = vel_htc(2);
     }//  else {
     //     if ( gg_is_walking && gg->get_lcg_count() == static_cast<size_t>(gg->get_default_step_time()/(2*m_dt))-1) {
     //         gg->set_offset_velocity_param(0,0,0);
     //     }
     // }
+    gg->get_velocity_param(m_debugData.data[0], m_debugData.data[1], m_debugData.data[2]);
 };
 
 void AutoBalancer::calcReferenceJointAnglesForIK ()

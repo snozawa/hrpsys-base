@@ -148,6 +148,7 @@ class AutoBalancer
   InPort<TimedBoolean> m_refFootOriginExtMomentIsHoldValueIn;
   // for debug
   TimedPoint3D m_cog;
+  TimedDoubleSeq m_debugData;
   
   // </rtc-template>
 
@@ -179,6 +180,7 @@ class AutoBalancer
   std::vector<OutPort<TimedPoint3D> *> m_limbCOPOffsetOut;
   // for debug
   OutPort<TimedPoint3D> m_cogOut;
+  OutPort<TimedDoubleSeq> m_debugDataOut;
   
   // </rtc-template>
 

@@ -1227,6 +1227,12 @@ namespace rats
     {
       offset_vel_param.set(vel_x, vel_y, vel_theta);
     };
+    void get_velocity_param (double& vel_x, double& vel_y, double& vel_theta) const
+    {
+        vel_x = vel_param.velocity_x;
+        vel_y = vel_param.velocity_y;
+        vel_theta = vel_param.velocity_theta;
+    };
     void set_stride_parameters (const double _stride_fwd_x, const double _stride_outside_y, const double _stride_outside_theta,
                                 const double _stride_bwd_x, const double _stride_inside_y, const double _stride_inside_theta)
     {
